@@ -1,5 +1,6 @@
 import os
 import re
+import json
 import urllib.request
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -10,7 +11,6 @@ from googleapiclient.http import MediaFileUpload
 
 app = FastAPI()
 
-# Frontend එකයි Backend එකයි එකතු කරන්න (CORS Settings)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,8 +21,8 @@ app.add_middleware(
 
 SCOPES = ['https://www.googleapis.com/auth/youtube.upload']
 VIDEO_DIR = "downloaded_videos"
+CONFIG_FILE = "config.json" # 💡 අපි කියවන්න යන config ෆයිල් එක
 
-# වීඩියෝ සේව් වෙන්න ෆෝල්ඩර් එකක් හදනවා
 if not os.path.exists(VIDEO_DIR):
     os.makedirs(VIDEO_DIR)
 
@@ -37,37 +37,53 @@ class UploadRequest(BaseModel):
     is_series: bool
     auth_code: str
 
+# 🔐 config.json ෆයිල් එකෙන් Google Secret එක කියවන ලොජික් එක
+def load_google_config():
+    if not os.path.exists(CONFIG_FILE):
+        raise HTTPException(
+            status_code=500, 
+            detail="config.json ෆයිල් එක සොයාගත නොහැක! කරුණාකර config.example.json එක config.json ලෙස වෙනස් කර ඔබේ දත්ත ඇතුළත් කරන්න."
+        )
+    
+    try:
+        with open(CONFIG_FILE, 'r') as f:
+            config_data = json.load(f)
+            # Google Client Secret එක තියෙන්නේ මේ කී එක ඇතුළේ වෙන්න ඕනේ
+            if "web" not in config_data and "installed" not in config_data:
+                raise HTTPException(status_code=500, detail="config.json හි ව්‍යුහය (Structure) වැරදියි!")
+            return config_data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Config ෆයිල් එක කියවීමේ දෝෂයක්: {str(e)}")
+
+
 # 📥 1. වීඩියෝ එක CUSTOM NAME එකෙන් බාන API එක
 @app.post("/download")
 def download_video(data: DownloadRequest):
     try:
-        # පරිශීලකයා නමක් දුන්නේ නැත්නම් default නමක් දානවා
         safe_name = data.custom_name.strip() if data.custom_name.strip() else "video"
-        # නමේ වෙනත් කැත අකුරු (Symbols) තියෙනවා නම් අයින් කරනවා
         safe_name = re.sub(r'[^a-zA-Z0-9_\- ]', '', safe_name)
-        
         file_path = os.path.join(VIDEO_DIR, f"{safe_name}.mp4")
         
-        # වීඩියෝ එක ඩවුන්ලෝඩ් කරනවා
         req = urllib.request.Request(data.url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req) as response, open(file_path, 'wb') as out_file:
             out_file.write(response.read())
             
-        return {"status": "success", "message": f"සැලකූ නම වන {safe_name}.mp4 නමින් වීඩියෝව සේව් වුණා!"}
+        return {"status": "success", "message": f"{safe_name}.mp4 නමින් වීඩියෝව සේව් වුණා!"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 # 🔑 2. YOUTUBE LOGIN ලින්ක් එක ගන්න API එක
 @app.get("/get-auth-url")
 def get_auth_url():
-    if not os.path.exists('client_secret.json'):
-        raise HTTPException(status_code=400, detail="client_secret.json ෆයිල් එක නැත!")
+    client_config = load_google_config() # 💡 ෆයිල් එකෙන් ගන්නේ
     
-    flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(
-        'client_secret.json', scopes=SCOPES)
+    flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_config(
+        client_config, scopes=SCOPES)
     flow.redirect_uri = 'urn:ietf:wg:oauth:2.0:oob'
     auth_url, _ = flow.authorization_url(prompt='consent')
     return {"auth_url": auth_url}
+
 
 # 📤 3. YOUTUBE UPLOAD කරලා AUTO-DELETE (CUT) කරන API එක
 @app.post("/upload")
@@ -78,14 +94,14 @@ def upload_and_cut_video(data: UploadRequest):
         raise HTTPException(status_code=404, detail="වීඩියෝ ෆයිල් එක සර්වර් එකේ නැත!")
         
     try:
-        # Authenticate කිරීම
-        flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(
-            'client_secret.json', scopes=SCOPES)
+        client_config = load_google_config() # 💡 ෆයිල් එකෙන් ගන්නේ
+        
+        flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_config(
+            client_config, scopes=SCOPES)
         flow.redirect_uri = 'urn:ietf:wg:oauth:2.0:oob'
         flow.fetch_token(code=data.auth_code)
         youtube = build('youtube', 'v3', credentials=flow.credentials)
         
-        # YouTube එකට යන විස්තර ටික සෙට් කිරීම
         body = {
             'snippet': {
                 'title': data.title,
@@ -98,7 +114,6 @@ def upload_and_cut_video(data: UploadRequest):
             }
         }
         
-        # වීඩියෝව අප්ලෝඩ් කිරීම
         media = MediaFileUpload(file_path, chunksize=1024*1024, resumable=True)
         request = youtube.videos().insert(part=','.join(body.keys()), body=body, media_body=media)
         
@@ -106,10 +121,9 @@ def upload_and_cut_video(data: UploadRequest):
         while response is None:
             status, response = request.next_chunk()
             
-        # 🔥 💡 උඹ ඉල්ලපු වැදගත්ම දේ: UPLOAD වුණු ගමන් සර්වර් එකෙන් ඩිලීට් කිරීම!
+        # 🔥 UPLOAD වුණු ගමන් සර්වර් එකෙන් ඩිලීට් කිරීම
         if os.path.exists(file_path):
             os.remove(file_path)
-            print(f"🗑️ සර්වර් එක පිරිසිදු කරමින්: {data.filename} සාර්ථකව මැකුවා!")
             
         return {"status": "success", "video_id": response['id'], "message": "YouTube එකට අප්ලෝඩ් වුණා, සර්වර් එකෙන් මැකුණා!"}
         

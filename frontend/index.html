@@ -13,38 +13,43 @@
         .btn-success { background-color: #00b0ff; border: none; }
         .btn-success:hover { background-color: #0091ea; }
         label { color: #aaaaaa; }
+        /* 🔄 කැරකි කැරකි පෙනෙන Spinner එක */
+        .spinner { display: none; width: 25px; height: 25px; border: 3px solid #f3f3f3; border-top: 3px solid #ff0000; border-radius: 50%; animation: spin 1s linear infinite; inline-block; vertical-align: middle; margin-left: 10px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
     <div class="container m-auto" style="max-width: 700px;">
         <h2 class="text-center mb-4 text-danger">🚀 YT Auto Master (Cut & Clean)</h2>
 
-        <!-- PART 1: DOWNLOAD -->
+        <!-- 1 වෙනි කොටස -->
         <div class="card p-4">
-            <h4 class="text-white mb-3">⬇️ 1 වෙනි කොටස: වීඩියෝව සර්වර් එකට බාගැනීම</h4>
+            <h4 class="text-white mb-3">📥 1 වෙනි කොටස: වීඩියෝව සර්වර් එකට බාගැනීම</h4>
             <div class="mb-3">
                 <label>වීඩියෝ ලින්ක් එක (URL):</label>
                 <input type="text" id="dl_url" class="form-control bg-dark text-white border-secondary" placeholder="https://...">
             </div>
             <div class="mb-3">
                 <label>වීඩියෝවට තැබිය යුතු නම (ෆෝල්ඩර් එකේ සේව් වීමට):</label>
-                <input type="text" id="dl_name" class="form-control bg-dark text-white border-secondary" placeholder="eg: funny_cat">
+                <input type="text" id="dl_name" class="form-control bg-dark text-white border-secondary" placeholder="eg: paka">
             </div>
-            <button onclick="downloadVideo()" class="btn btn-primary w-100">📥 සර්වර් ෆෝල්ඩර් එකට බාගන්න</button>
+            <button onclick="downloadVideo()" class="btn btn-primary w-100">
+                📥 සර්වර් ෆෝල්ඩර් එකට බාගන්න <div id="dl_spinner" class="spinner"></div>
+            </button>
             <div id="dl_status" class="mt-2 text-warning fw-bold"></div>
         </div>
 
-        <!-- PART 2: AUTHENTICATION -->
+        <!-- 2 වෙනි කොටස -->
         <div class="card p-4">
             <h4 class="text-white mb-3">🔑 2 වෙනි කොටස: Google ගිණුම සම්බන්ධ කිරීම</h4>
             <button onclick="getAuthLink()" class="btn btn-secondary w-100 mb-3">1. Link YouTube Account</button>
             <div class="mb-3">
-                <label>ලොග් වී ලැබුණු පිටුවේ ඇති කේතය (කපන්නේ නැතිව කෙළින්ම පේස්ට් කරන්න):</label>
-                <input type="text" id="auth_code" class="form-control bg-dark text-white border-secondary" placeholder="පිටුවේ ඇති කේතය මෙතනට දාන්න">
+                <label>ලොග් වී ලැබෙන URL එකේ ඇති `code=` එක මෙතනට පේස්ට් කරන්න:</label>
+                <input type="text" id="auth_code" class="form-control bg-dark text-white border-secondary" placeholder="4/0AXEQxIC...">
             </div>
         </div>
 
-        <!-- PART 3: SELECT & UPLOAD -->
+        <!-- 3 වෙනි කොටස -->
         <div class="card p-4">
             <h4 class="text-white mb-3">📤 3 වෙනි කොටස: වීඩියෝව තෝරා YouTube දැමීම</h4>
             <button onclick="loadVideoList()" class="btn btn-warning w-100 mb-3">🔄 සර්වර් එකේ ඇති වීඩියෝ ලැයිස්තුව ලෝඩ් කරන්න</button>
@@ -63,21 +68,25 @@
                 <label>YouTube විස්තරය (Description):</label>
                 <textarea id="up_desc" class="form-control bg-dark text-white border-secondary" rows="3"></textarea>
             </div>
-            <button onclick="uploadVideo()" class="btn btn-success w-100">🚀 YouTube වෙත අප්ලෝඩ් කර සර්වර් එකෙන් කපන්න</button>
+            <button onclick="uploadVideo()" class="btn btn-success w-100">
+                🚀 YouTube වෙත අප්ලෝඩ් කර සර්වර් එකෙන් කපන්න <div id="up_spinner" class="spinner"></div>
+            </button>
             <div id="up_status" class="mt-2 text-info fw-bold"></div>
         </div>
     </div>
 
     <script>
-        async def = null; // සරල JS Fetch භාවිතය
-
         async function downloadVideo() {
             const url = document.getElementById("dl_url").value;
             const name = document.getElementById("dl_name").value;
             const status = document.getElementById("dl_status");
+            const spinner = document.getElementById("dl_spinner");
+            
             if(!url || !name) return alert("ලින්ක් එක සහ නම අනිවාර්යයි!");
             
-            status.innerText = "⏳ වීඩියෝව බාගනිමින් පවතී... විනාඩි කිහිපයක් යනු ඇත...";
+            status.innerText = "⏳ වීඩියෝව සර්වර් එකට බාගනිමින් පවතී... කරුණාකර රැඳී සිටින්න...";
+            spinner.style.display = "inline-block";
+            
             try {
                 const res = await fetch('/download', {
                     method: 'POST',
@@ -86,8 +95,9 @@
                 });
                 const data = await res.json();
                 status.innerText = data.detail ? "❌ " + data.detail : data.message;
-                loadVideoList(); // බාගත්ත ගමන් ලිස්ට් එක අප්ඩේට් කරනවා
-            } catch(e) { status.innerText = "❌ දෝෂයකි!"; }
+                loadVideoList(); 
+            } catch(e) { status.innerText = "❌ සර්වර් දෝෂයකි!"; }
+            finally { spinner.style.display = "none"; }
         }
 
         async function getAuthLink() {
@@ -107,7 +117,7 @@
                 data.videos.forEach(v => {
                     select.innerHTML += `<option value="${v}">${v}</option>`;
                 });
-            } catch(e) { alert("ලැයිස්තුව ගැනීමට නොහැකි විය!"); }
+            } catch(e) { alert("ලැයිස්තුව ලෝඩ් කිරීමට නොහැකි විය!"); }
         }
 
         async function uploadVideo() {
@@ -116,10 +126,13 @@
             const desc = document.getElementById("up_desc").value;
             const code = document.getElementById("auth_code").value;
             const status = document.getElementById("up_status");
+            const spinner = document.getElementById("up_spinner");
 
             if(!video || !title || !code) return alert("වීඩියෝව, මාතෘකාව සහ Auth කේතය අනිවාර්යයි!");
 
-            status.innerText = "⏳ YouTube වෙත අප්ලෝඩ් වෙමින් පවතී... කරුණාකර රැඳී සිටින්න...";
+            status.innerText = "⏳ YouTube වෙත අප්ලෝඩ් වෙමින් පවතී...";
+            spinner.style.display = "inline-block";
+            
             try {
                 const res = await fetch('/upload', {
                     method: 'POST',
@@ -130,10 +143,11 @@
                 if(data.detail) {
                     status.innerText = "❌ " + data.detail;
                 } else {
-                    status.innerHTML = `✅ ${data.message} <br> <a href="${data.youtube_url}" target="_blank" class="text-warning">${data.youtube_url}</a>`;
-                    loadVideoList(); // මැකුණට පස්සේ ලිස්ට් එකෙන් අයින් කරන්න
+                    status.innerHTML = `✅ ${data.message} <br> <a href="${data.youtube_url}" target="_blank" style="color: #ff0000;">${data.youtube_url}</a>`;
+                    loadVideoList(); 
                 }
             } catch(e) { status.innerText = "❌ අප්ලෝඩ් වීම අසාර්ථකයි!"; }
+            finally { spinner.style.display = "none"; }
         }
     </script>
 </body>

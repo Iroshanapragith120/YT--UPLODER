@@ -18,8 +18,6 @@
         .btn-refresh { background: #475569; width: auto; margin: 0; padding: 8px 15px; font-size: 14px; }
         .btn-refresh:hover { background: #64748b; }
         .loading { display: none; color: #f59e0b; font-weight: bold; text-align: center; margin: 10px 0; }
-        
-        /* Inline Status Messages */
         .status-box { display: none; padding: 12px; border-radius: 6px; margin: 10px 0; font-weight: bold; }
         .status-success { display: block; background: #064e3b; color: #34d399; border: 1px solid #059669; }
         .status-error { display: block; background: #4c1d1d; color: #f87171; border: 1px solid #dc2626; text-align: left; white-space: pre-wrap; font-family: monospace; font-size: 13px; }
@@ -27,50 +25,42 @@
 </head>
 <body>
 
-    <!-- පළමු පියවර: වීඩියෝ එක සර්වර් එකට බාගැනීම -->
+    <!-- 1. Video Download Section -->
     <div class="card">
         <h1>📥 1. Direct Link එකෙන් Cloud එකට බාන්න</h1>
-        <p>ලින්ක් එක සහ සේව් වෙන්න ඕන නම දීලා වීඩියෝ එක Cloud එකට ගන්න.</p>
-        
-        <!-- Form එකක් වෙනුවට Div එකක් දැම්මා Auto-Submit / Auto-Refresh වීම් 100% ක් වැලැක්වීමට -->
-        <div id="downloadFormSection">
+        <div id="downloadArea">
             <label for="videoUrl">Direct Video URL:</label>
-            <input type="url" id="videoUrl" placeholder="https://example.com/video.mp4" required>
+            <input type="url" id="videoUrl" placeholder="https://example.com/video.mp4">
             
-            <label for="customName">Save As (වීඩියෝ එක සේව් වෙන්න ඕන නම - Optional):</label>
+            <label for="customName">Save As (Optional):</label>
             <input type="text" id="customName" placeholder="my_favorite_video.mp4">
             
             <button type="button" id="submitDownloadBtn">වීඩියෝ එක Cloud එකට බාන්න</button>
         </div>
-        
         <div id="downloadLoading" class="loading">⏳ වීඩියෝ එක බාමින් පවතී... කරුණාකර රැඳී සිටින්න...</div>
         <div id="downloadStatus" class="status-box"></div>
     </div>
 
-    <!-- දෙවන පියවර: YouTube එකට අප්ලෝඩ් කිරීම -->
+    <!-- 2. YouTube Upload Section -->
     <div class="card">
         <h1>🚀 2. බාපු වීඩියෝ YouTube එකට අප්ලෝඩ් කරන්න</h1>
-        <p>සිලෙක්ට් කරලා YouTube එකට තල්ලු කරන්න.</p>
-        
-        <!-- Form එක සම්පූර්ණයෙන්ම අයින් කර Div එකක් දැම්මා, එවිට Refresh ලෙඩේ සදාකාලිකවම ඉවරයි -->
-        <div id="uploadFormSection">
+        <div id="uploadArea">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
                 <label style="margin: 0;">Select Video from Cloud:</label>
-                <button type="button" class="btn-refresh" onclick="refreshVideoList()">🔄 Refresh List</button>
+                <button type="button" class="btn-refresh" id="refreshBtn">🔄 Refresh List</button>
             </div>
-            <select id="videoSelect" required>
+            <select id="videoSelect">
                 <option value="">-- 🔄 Refresh කර වීඩියෝවක් තෝරන්න --</option>
             </select>
             
             <label for="videoTitle">YouTube Title:</label>
-            <input type="text" id="videoTitle" placeholder="වීඩියෝ මාතෘකාව" required>
+            <input type="text" id="videoTitle" placeholder="වීඩියෝ මාතෘකාව">
             
             <label for="videoDesc">YouTube Description:</label>
-            <textarea id="videoDesc" placeholder="වීඩියෝ විස්තරය" rows="4" required></textarea>
+            <textarea id="videoDesc" placeholder="වීඩියෝ විස්තරය" rows="4"></textarea>
             
             <button type="button" class="btn-upload" id="submitUploadBtn">YouTube වෙත අප්ලෝඩ් කරන්න</button>
         </div>
-        
         <div id="uploadLoading" class="loading">⏳ YouTube වෙත අප්ලෝඩ් වෙමින් පවතී... කරුණාකර රැඳී සිටින්න...</div>
         <div id="uploadStatus" class="status-box"></div>
     </div>
@@ -78,22 +68,18 @@
     <script>
         const API_BASE = window.location.origin;
 
-        // 1. Dropdown Refresh කිරීම (උඹ එබුවොත් විතරක්මයි වැඩ කරන්නේ)
-        async function refreshVideoList() {
+        // Manual Refresh කිරීම පමණයි
+        document.getElementById("refreshBtn").addEventListener("click", async () => {
             const select = document.getElementById("videoSelect");
             select.innerHTML = '<option value="">⏳ පූරණය වෙමින් පවතී...</option>';
-            
             try {
                 const response = await fetch(`${API_BASE}/list-videos`);
                 const videos = await response.json();
-                
                 select.innerHTML = '<option value="">-- වීඩියෝවක් තෝරන්න --</option>';
-                
                 if (videos.length === 0) {
                     select.innerHTML = '<option value="">-- Cloud එකේ දැනට වීඩියෝ නැත --</option>';
                     return;
                 }
-                
                 videos.forEach(vid => {
                     const opt = document.createElement("option");
                     opt.value = vid.path;
@@ -103,33 +89,26 @@
             } catch (err) {
                 select.innerHTML = '<option value="">❌ ලිස්ට් එක ගන්න බැරි වුණා!</option>';
             }
-        }
+        });
 
-        // 2. වීඩියෝ බාන බටන් එක ක්ලික් කිරීම
+        // Downloader Logic
         document.getElementById("submitDownloadBtn").addEventListener("click", async () => {
             const url = document.getElementById("videoUrl").value;
             const customName = document.getElementById("customName").value;
             const loading = document.getElementById("downloadLoading");
             const statusBox = document.getElementById("downloadStatus");
             
-            if (!url) {
-                alert("කරුණාකර Direct Video URL එක ඇතුළත් කරන්න!");
-                return;
-            }
+            if (!url) { alert("කරුණාකර URL එකක් දාන්න!"); return; }
             
             loading.style.display = "block";
             statusBox.style.display = "none";
-            statusBox.className = "status-box";
             
             try {
                 const formData = new FormData();
                 formData.append("url", url);
                 formData.append("custom_name", customName);
 
-                const response = await fetch(`${API_BASE}/download`, {
-                    method: "POST",
-                    body: formData
-                });
+                const response = await fetch(`${API_BASE}/download`, { method: "POST", body: formData });
                 const data = await response.json();
                 
                 if (response.ok) {
@@ -137,20 +116,17 @@
                     statusBox.className = "status-box status-success";
                     document.getElementById("videoUrl").value = "";
                     document.getElementById("customName").value = "";
-                    // බාගත්ත ගමන් Dropdown එක Auto Refresh නොවේ! User බටන් එකෙන්ම Refresh කරගත යුතුය.
                 } else {
-                    statusBox.textContent = `❌ වැරැද්දක් වුණා: ${data.detail || "බාගැනීම අසාර්ථකයි"}`;
+                    statusBox.textContent = `❌ බාගැනීම අසාර්ථකයි: ${data.detail}`;
                     statusBox.className = "status-box status-error";
                 }
             } catch (err) {
-                statusBox.textContent = "❌ සර්වර් එක කනෙක්ට් කරගන්න බැරි වුණා!";
+                statusBox.textContent = "❌ සර්වර් සම්බන්ධතාවය බිඳ වැටුණා!";
                 statusBox.className = "status-box status-error";
-            } finally {
-                loading.style.display = "none";
-            }
+            } finally { loading.style.display = "none"; }
         });
 
-        // 3. YouTube Upload බටන් එක ක්ලික් කිරීම
+        // Uploader Logic (ක්‍රෑෂ් නොවී Error එක කොටුව ඇතුළේම තියාගන්නා ක්‍රමය)
         document.getElementById("submitUploadBtn").addEventListener("click", async () => {
             const filePath = document.getElementById("videoSelect").value;
             const title = document.getElementById("videoTitle").value;
@@ -159,13 +135,12 @@
             const statusBox = document.getElementById("uploadStatus");
             
             if (!filePath || !title || !description) {
-                alert("කරුණාකර වීඩියෝවක් තෝරා, Title සහ Description සම්පූර්ණ කරන්න!");
+                alert("කරුණාකර සියලු විස්තර පුරවන්න!");
                 return;
             }
             
             loading.style.display = "block";
             statusBox.style.display = "none";
-            statusBox.className = "status-box";
             
             try {
                 const formData = new FormData();
@@ -173,11 +148,7 @@
                 formData.append("title", title);
                 formData.append("description", description);
 
-                const response = await fetch(`${API_BASE}/upload`, {
-                    method: "POST",
-                    body: formData
-                });
-                
+                const response = await fetch(`${API_BASE}/upload`, { method: "POST", body: formData });
                 const data = await response.json();
                 
                 if (response.ok) {
@@ -186,19 +157,15 @@
                     document.getElementById("videoTitle").value = "";
                     document.getElementById("videoDesc").value = "";
                 } else {
-                    // Python Traceback එක රතු පාට කොටුව ඇතුළේ ස්ථිරවම රඳවා තබයි!
+                    // මෙතන වැරැද්ද සදාකාලිකව කොටුවේ තියෙනවා!
                     statusBox.textContent = `❌ YouTube Upload Error:\n${data.detail}`;
                     statusBox.className = "status-box status-error";
                 }
             } catch (err) {
-                statusBox.textContent = "❌ සර්වර් එක සමඟ තිබුණු සම්බන්ධතාවය බිඳ වැටුණා! (FastAPI / Colab Server Offline)";
+                statusBox.textContent = "❌ සර්වර් එක Offline ගියා! (Python/Colab Code එක Check කරන්න)";
                 statusBox.className = "status-box status-error";
-            } finally {
-                loading.style.display = "none";
-            }
+            } finally { loading.style.display = "none"; }
         });
-
-        // මුලින්ම පේජ් එක ලෝඩ් වෙද්දී ලිස්ට් එක හිස්ව පෙන්වයි
     </script>
 </body>
 </html>

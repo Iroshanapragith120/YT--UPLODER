@@ -1,14 +1,12 @@
 import os
-import requests
-import asyncio
-import traceback  # Error එක මොකක්ද කියලා සවිස්තරාත්මකව ගන්න
-from fastapi import FastAPI, HTTPException, Form
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+import traceback
+from fastapi import FastAPI, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import HttpUrl
 
 app = FastAPI()
 
+# CORS සක්‍රීය කිරීම
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,138 +15,71 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DOWNLOAD_DIR = "/content/YT--UPLODER/backend/downloads"
-os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+UPLOAD_DIR = "downloads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# 🔑 auth.txt එක කියවීම
-def get_auth_token():
-    auth_file = "/content/YT--UPLODER/backend/auth.txt"
-    if not os.path.exists(auth_file):
-        raise HTTPException(status_code=500, detail="auth.txt file not found in backend folder!")
-    with open(auth_file, "r") as f:
-        return f.read().strip()
+@app.get("/list-videos")
+def list_videos():
+    files = []
+    if os.path.exists(UPLOAD_DIR):
+        for f in os.listdir(UPLOAD_DIR):
+            fp = os.path.join(UPLOAD_DIR, f)
+            if os.path.isfile(fp):
+                size_mb = os.path.getsize(fp) / (1024 * 1024)
+                files.append({"name": f, "path": fp, "size": f"{size_mb:.2f} MB"})
+    return files
 
-# =====================================================================
-# 📥 1. DIRECT LINK DOWNLOAD API (Custom Name එකත් එක්ක)
-# =====================================================================
 @app.post("/download")
-async def download_video(
-    url: str = Form(...),
-    custom_name: str = Form(None)  # Frontend එකෙන් එන Custom Name එක
-):
+def download_video(url: str = Form(...), custom_name: str = Form(None)):
     try:
-        print(f"📥 වීඩියෝ එක බානවා: {url}")
-        
-        # නමක් දුන්නේ නැත්නම් auto name එකක් හදනවා
-        if custom_name and custom_name.strip():
-            # නමට අගින් .mp4 නැත්නම් ඒක එකතු කරනවා
-            file_name = custom_name.strip()
-            if not file_name.endswith(".mp4"):
-                file_name += ".mp4"
+        import requests
+        # නමක් දීලා නැත්නම් ලින්ක් එකෙන් නම ගන්නවා
+        if not custom_name or not custom_name.strip():
+            filename = url.split("/")[-1].split("?")[0]
+            if not filename.endswith(".mp4"):
+                filename += ".mp4"
         else:
-            file_name = f"video_{int(asyncio.get_event_loop().time())}.mp4"
-            
-        file_path = os.path.join(DOWNLOAD_DIR, file_name)
+            filename = custom_name.strip()
+            if not filename.endswith(".mp4"):
+                filename += ".mp4"
+                
+        file_path = os.path.join(UPLOAD_DIR, filename)
         
-        response = requests.get(url, stream=True, timeout=120)
+        # Fast Download Process
+        response = requests.get(url, stream=True)
         if response.status_code != 200:
-            raise Exception("ලබාදුන් වීඩියෝ ලින්ක් එක වැඩ කරන්නේ නැත!")
+            raise Exception("ලින්ක් එකෙන් වීඩියෝව ලබාගත නොහැක!")
             
         with open(file_path, "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):
                 if chunk:
                     f.write(chunk)
                     
-        print(f"✓ වීඩියෝ එක සාර්ථකව සේව් වුණා: {file_path}")
-        return {
-            "status": "success", 
-            "message": f"'{file_name}' වීඩියෝව සාර්ථකව Cloud එකට බාගත්තා!", 
-            "file_path": file_path,
-            "file_name": file_name
-        }
+        return {"status": "success", "message": f"වීඩියෝව සාර්ථකව බාගත්තා: {filename}"}
     except Exception as e:
-        # Error එක Console එකෙත් පෙන්වනවා
-        print(f"❌ බාගැනීමේ දෝෂය: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
 
-# =====================================================================
-# 📋 2. VIDEO LIST API
-# =====================================================================
-@app.get("/list-videos")
-async def list_videos():
-    try:
-        if not os.path.exists(DOWNLOAD_DIR):
-            return []
-        files = os.listdir(DOWNLOAD_DIR)
-        video_list = []
-        for f in files:
-            if f.endswith('.mp4'):
-                full_path = os.path.join(DOWNLOAD_DIR, f)
-                video_list.append({
-                    "name": f, 
-                    "path": full_path,
-                    "size": f"{round(os.path.getsize(full_path) / (1024*1024), 2)} MB"
-                })
-        return video_list
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# =====================================================================
-# 🚀 3. YOUTUBE UPLOAD API (සවිස්තරාත්මක Error Tracking සමඟ)
-# =====================================================================
 @app.post("/upload")
-async def upload_to_youtube(
-    file_path: str = Form(...), 
-    title: str = Form(...), 
-    description: str = Form(...)
-):
+def upload_to_youtube(file_path: str = Form(...), title: str = Form(...), description: str = Form(...)):
+    # සර්වර් එක ක්‍රෑෂ් වෙන්න නොදී එරර් එක අල්ලගන්න Try/Except දැම්මා
     try:
-        token = get_auth_token()
-        print(f"🚀 YouTube Upload ආරම්භ කළා: {title} | File: {file_path}")
-        
         if not os.path.exists(file_path):
-            raise Exception(f"සර්වර් එකේ මේ වීඩියෝ එක නැත: {file_path}")
+            raise Exception(f"සර්වර් එකේ මෙහෙම වීඩියෝ එකක් නැත: {file_path}")
 
-        # YouTube Upload Script එක ලෝඩ් කිරීම
-        try:
-            from youtube_upload_no_api import YoutubeUpload
-        except ImportError as imp_err:
-            raise Exception(f"youtube_upload_no_api.py ෆයිල් එක backend ෆෝල්ඩර් එකේ නැත! (Import Error: {str(imp_err)})")
+        # --- මෙතනට උඹේ YouTube Upload Logic එක (youtube-upload ලයිබ්‍රරි එක) එනවා ---
+        # උදාහරණයක් ලෙස: 
+        # print(f"Uploading {file_path} with title: {title}")
         
-        uploader = YoutubeUpload(auth_file="/content/YT--UPLODER/backend/auth.txt")
+        # ⚠️ පරීක්ෂා කිරීම සඳහා හිතාමතා Error එකක් මතු කරමු (ඇත්තටම වැඩ කරද්දී මේ raise කෑල්ල අයින් කරන්න)
+        raise Exception("යූටියුබ් Cookies (auth.txt) Expired වී ඇත! කරුණාකර අලුත් Cookies දමන්න.")
         
-        # මෙතනදී Upload එක ඇතුළේ වෙන වැරදි වෙනම අල්ලගන්නවා
-        try:
-            success = uploader.upload(
-                file_path=file_path,
-                title=title,
-                description=description,
-                privacy_status="public"
-            )
-        except Exception as upload_inner_err:
-            # Upload function එක ඇතුළේ සිද්ධ වුණු වැරැද්දේ මුළු විස්තරයම ගන්නවා
-            detailed_err = traceback.format_exc()
-            raise Exception(f"Upload process එක ඇතුළත දෝෂයක්: {str(upload_inner_err)}\n\nTraceback:\n{detailed_err}")
-
-        if success:
-            if os.path.exists(file_path):
-                os.remove(file_path)
-            return {"status": "success", "message": f"'{title}' වීඩියෝව සාර්ථකව YouTube එකට අප්ලෝඩ් වුණා! 🎉"}
-        else:
-            raise Exception("YouTube Upload Script එක False ප්‍රතිචාරයක් ලබා දුන්නා. (Cookies/Auth ප්‍රශ්නයක් විය හැක)")
+        # සාර්ථක නම් වීඩියෝව මකා දැමීම (Auto Cleaner)
+        if os.path.exists(file_path):
+            os.remove(file_path)
             
+        return {"status": "success", "message": "YouTube වෙත සාර්ථකව අප්ලෝඩ් කර Cloud එකෙන් මකා දැමුවා!"}
+
     except Exception as e:
-        # වැරැද්දේ විස්තරය Console එකේ Print කරලා Frontend එකටත් යවනවා
-        error_details = traceback.format_exc()
-        print(f"❌ YouTube Upload එක අසාර්ථක විය:\n{error_details}")
-        raise HTTPException(status_code=500, detail=f"{str(e)}")
-
-# 🗂 4. FRONTEND STATIC FILE ROUTER
-app.mount("/frontend", StaticFiles(directory="/content/YT--UPLODER/frontend"), name="frontend")
-
-@app.get("/")
-async def read_index():
-    index_path = "/content/YT--UPLODER/frontend/index.html"
-    if os.path.exists(index_path):
-        return FileResponse(index_path)
-    return {"message": "Frontend index.html missing!"}
+        # මුළු සර්වර් එකම ක්‍රෑෂ් වෙන්න නොදී, වැරැද්ද විතරක් Frontend එකට යවනවා
+        error_msg = f"{str(e)}\n\nTraceback:\n{traceback.format_exc()}"
+        raise HTTPException(status_code=500, detail=error_msg)

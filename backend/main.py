@@ -10,15 +10,14 @@ from pydantic import BaseModel
 from google_auth_oauthlib.flow import Flow
 import googleapiclient.discovery
 import googleapiclient.errors
+from googleapiclient.http import MediaFileUpload
 
 app = FastAPI()
 
 SCOPES = ['https://www.googleapis.com/auth/youtube.upload']
 
-# 💡 Global variable එකක් (සර්වර් එකට PKCE code verifier එක මතක තියාගන්න)
 current_code_verifier = ""
 
-# Pydantic Models
 class DownloadRequest(BaseModel):
     url: str
     custom_name: str = "video"
@@ -30,7 +29,6 @@ class UploadRequest(BaseModel):
     is_series: bool = False
     auth_code: str
 
-# Static Files Setup
 if os.path.exists("frontend"):
     app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
@@ -41,15 +39,11 @@ def read_root():
         return FileResponse(index_path)
     return {"message": "Frontend index.html missing!"}
 
-# 🛠️ GitHub root එකේ තියෙන config.json ෆයිල් එක හොයාගන්නා Helper Function එක
 def get_credentials_path():
-    # Colab එකේ clone වෙද්දී project root එක වෙන්නේ වත්මන් directory එකයි (project/)
-    # උඹ දාපු config.json කියන නම මෙතනට ඇතුළත් කරා මචන්
     possible_names = ["config.json", "credentials.json", "client_secret.json"]
     for name in possible_names:
         if os.path.exists(name):
             return name
-    # ප්‍රොජෙක්ට් ෆෝල්ඩරයෙන් පිටත සෙවීම (Backup)
     for name in possible_names:
         parent_path = os.path.join("..", name)
         if os.path.exists(parent_path):
@@ -60,23 +54,17 @@ def get_credentials_path():
 @app.get("/get-auth-url")
 def get_auth_url():
     global current_code_verifier
-    
     json_path = get_credentials_path()
     if not json_path:
-        raise HTTPException(
-            status_code=500, 
-            detail="හදිසි දෝෂයකි: GitHub root එකේ config.json ෆයිල් එක සොයාගත නොහැක! කරුණාකර ෆයිල් එක නිවැරදිව අප්ලෝඩ් කර ඇතිදැයි බලන්න."
-        )
+        raise HTTPException(status_code=500, detail="config.json ෆයිල් එක සොයාගත නොහැක!")
         
     try:
-        # 💡 උඹ අප්ලෝඩ් කරපු config.json ෆයිල් එක කෙළින්ම මෙතනින් කියවනවා
         flow = Flow.from_client_secrets_file(
             json_path,
             scopes=SCOPES,
             redirect_uri="http://localhost:8000/oauth2callback"
         )
         
-        # 💡 PKCE රහස් කේතයන් සාදා සර්වර් එකේ මතක තබා ගැනීම (Missing code verifier ලෙඩේට විසඳුම)
         current_code_verifier = secrets.token_urlsafe(64)
         code_challenge = base64.urlsafe_b64encode(
             hashlib.sha256(current_code_verifier.encode('utf-8')).digest()
@@ -92,12 +80,11 @@ def get_auth_url():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# 📥 2. VIDEO DOWNLOAD STATUS CHECK
 @app.get("/download-status-check")
 def check():
     return {"status": "ready"}
 
-# 📥 VIDEO DOWNLOAD LOGIC
+# 📥 2. VIDEO DOWNLOAD
 @app.post("/download")
 async def download_video(req: DownloadRequest):
     safe_name = "".join([c for c in req.custom_name if c.isalpha() or c.isdigit() or c in ' _-']).strip()
@@ -105,22 +92,31 @@ async def download_video(req: DownloadRequest):
         safe_name = "video"
     filename = f"{safe_name}.mp4"
     
-    with open(filename, "w") as f:
-        f.write("dummy video data")
+    try:
+        print(f"Downloading video from: {req.url}")
+        os.system(f'yt-dlp -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 "{req.url}" -o "{filename}"')
         
-    return {"message": f"වීඩියෝව සාර්ථකව සර්වර් එකට බාගත්තා! (නම: {filename})"}
+        if not os.path.exists(filename):
+            raise HTTPException(status_code=500, detail="yt-dlp මඟින් වීඩියෝව බාගැනීමට අපොහොසත් විය!")
+            
+        return {"message": f"වීඩියෝව සාර්ථකව සර්වර් එකට බාගත්තා! (නම: {filename})"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-# 📤 3. YOUTUBE UPLOAD & AUTO-DELETE
+# 📤 3. YOUTUBE UPLOAD (ලින්ක් එක ජෙනරේට් කරන කෑල්ල ඇතුළත් කර ඇත)
 @app.post("/upload")
 async def upload_video(req: UploadRequest):
     global current_code_verifier
     
     if not current_code_verifier:
-        raise HTTPException(status_code=400, detail="සර්වර් එකේ Code Verifier එක නැති වී ඇත! කරුණාකර නැවත ලින්ක් එක ක්ලික් කරන්න.")
+        raise HTTPException(status_code=400, detail="සර්වර් එකේ Code Verifier එක නැත! නැවත ලින්ක් එක ගන්න.")
 
     json_path = get_credentials_path()
     if not json_path:
         raise HTTPException(status_code=500, detail="config.json ෆයිල් එක සොයාගත නොහැක!")
+
+    if not os.path.exists(req.filename):
+        raise HTTPException(status_code=404, detail="ඩවුන්ලෝඩ් වුණු වීඩියෝ ෆයිල් එක සර්වර් එකේ නැත!")
 
     try:
         flow = Flow.from_client_secrets_file(
@@ -136,13 +132,47 @@ async def upload_video(req: UploadRequest):
             "youtube", "v3", credentials=credentials
         )
 
-        print(f"Uploading {req.filename} to YouTube...")
+        body = {
+            'snippet': {
+                'title': req.title,
+                'description': req.description,
+                'tags': ['auto_upload'],
+                'categoryId': '22'
+            },
+            'status': {
+                'privacyStatus': 'private' 
+            }
+        }
+
+        media = MediaFileUpload(req.filename, chunksize=1024*1024, resumable=True, mimetype='video/mp4')
         
+        request = youtube.videos().insert(
+            part=','.join(body.keys()),
+            body=body,
+            media_body=media
+        )
+        
+        print("Uploading file chunks to YouTube...")
+        response = None
+        while response is None:
+            status, response = request.next_chunk()
+            if status:
+                print(f"Uploaded {int(status.progress() * 100)}%")
+
+        # 🚀 මෙතනින් තමයි වීඩියෝ ID එක අරන් ලින්ක් එක හදන්නේ මචන්
+        video_id = response.get("id", "UNKNOWN")
+        youtube_link = f"https://youtu.be/{video_id}"
+        
+        # සර්වර් එකෙන් File එක මකා දැමීම
         if os.path.exists(req.filename):
             os.remove(req.filename)
-            print(f"🗑️ සර්වර් එක පිරිසිදු කර {req.filename} මකා දමන ลදී.")
+            print(f"🗑️ සර්වර් එක පිරිසිදු කර {req.filename} මකා දමන ලදී.")
 
-        return {"message": "සාර්ථකයි!", "video_id": "SUCCESS"}
+        return {
+            "message": f"🔥 සාර්ථකයි! වීඩියෝව YouTube වෙත ගියා. සර්වර් එකෙන් සදහටම මැකී ගියා (Cut & Cleaned)!",
+            "video_id": video_id,
+            "youtube_url": youtube_link # 👈 ඔන්න සයිට් එකට ලින්ක් එක යැව්වා
+        }
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

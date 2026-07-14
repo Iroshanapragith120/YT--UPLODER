@@ -27,7 +27,7 @@
 </head>
 <body>
 
-    <!-- පළමු පියවර: වීඩියෝ එක සර්වර් එකට බාගැනීම -->
+    <!-- පළමු පියවර: වීඩියෝ එක සර්වර් එකට බාගැනීම (නොවෙනස්ව පවතී) -->
     <div class="card">
         <h1>📥 1. Direct Link එකෙන් Cloud එකට බාන්න</h1>
         <p>ලින්ක් එක සහ සේව් වෙන්න ඕන නම දීලා වීඩියෝ එක Cloud එකට ගන්න.</p>
@@ -43,16 +43,16 @@
         </form>
         
         <div id="downloadLoading" class="loading">⏳ වීඩියෝ එක බාමින් පවතී... කරුණාකර රැඳී සිටින්න...</div>
-        <!-- මෙතන තමයි Alert එක වෙනුවට සාර්ථක වුණු මැසේජ් එක පෙන්නන්නේ -->
         <div id="downloadStatus" class="status-box"></div>
     </div>
 
-    <!-- දෙවන පියවර: බාපු වීඩියෝ ලිස්ට් එක සහ YouTube එකට අප්ලෝඩ් කිරීම -->
+    <!-- දෙවන පියවර: YouTube එකට අප්ලෝඩ් කිරීම (Auto-Refresh ලෙඩේ හැදූ කොටස) -->
     <div class="card">
         <h1>🚀 2. බාපු වීඩියෝ YouTube එකට අප්ලෝඩ් කරන්න</h1>
         <p>සිලෙක්ට් කරලා YouTube එකට තල්ලු කරන්න.</p>
         
-        <form id="uploadForm">
+        <!-- Form Tag එකටම action හෝ method දාන්නේ නැතුව JavaScript වලින් handle කරන නිසා form එක submit එක වලක්වනවා -->
+        <form id="uploadForm" onsubmit="event.preventDefault();">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
                 <label style="margin: 0;">Select Video from Cloud:</label>
                 <button type="button" class="btn-refresh" onclick="refreshVideoList()">🔄 Refresh List</button>
@@ -67,18 +67,17 @@
             <label for="videoDesc">YouTube Description:</label>
             <textarea id="videoDesc" placeholder="වීඩියෝ විස්තරය" rows="4" required></textarea>
             
-            <button type="submit" class="btn-upload">YouTube වෙත අප්ලෝඩ් කරන්න</button>
+            <button type="button" class="btn-upload" id="submitUploadBtn">YouTube වෙත අප්ලෝඩ් කරන්න</button>
         </form>
         
         <div id="uploadLoading" class="loading">⏳ YouTube වෙත අප්ලෝඩ් වෙමින් පවතී... කරුණාකර රැඳී සිටින්න...</div>
-        <!-- YouTube එකේ වැරදි ට්‍රැක් කරන කොටස -->
         <div id="uploadStatus" class="status-box"></div>
     </div>
 
     <script>
         const API_BASE = window.location.origin;
 
-        // 1. Dropdown එක Refresh කරන Function එක
+        // 1. Dropdown Refresh කිරීම (නොවෙනස්ව පවතී)
         async function refreshVideoList() {
             const select = document.getElementById("videoSelect");
             select.innerHTML = '<option value="">⏳ පූරණය වෙමින් පවතී...</option>';
@@ -105,7 +104,7 @@
             }
         }
 
-        // 2. වීඩියෝ එක බාන Form එක
+        // 2. වීඩියෝ බාන Form එක (නොවෙනස්ව පවතී)
         document.getElementById("downloadForm").addEventListener("submit", async (e) => {
             e.preventDefault();
             const url = document.getElementById("videoUrl").value;
@@ -133,7 +132,7 @@
                     statusBox.classList.add("status-success");
                     document.getElementById("videoUrl").value = "";
                     document.getElementById("customName").value = "";
-                    refreshVideoList(); // Dropdown එකත් එවලේම අප්ඩේට් කරනවා
+                    refreshVideoList();
                 } else {
                     statusBox.textContent = `❌ වැරැද්දක් වුණා: ${data.detail || "බාගැනීම අසාර්ථකයි"}`;
                     statusBox.classList.add("status-error");
@@ -146,20 +145,22 @@
             }
         });
 
-        // 3. YouTube Upload Form එක (සවිස්තරාත්මක Error Reporting සමඟ)
-        document.getElementById("uploadForm").addEventListener("submit", async (e) => {
-            e.preventDefault();
+        // 3. YouTube Upload බටන් එක ක්ලික් කිරීම (Auto-Refresh ලෙඩේ සම්පූර්ණයෙන්ම සුවපත් කළ ක්‍රමය)
+        document.getElementById("submitUploadBtn").addEventListener("click", async (e) => {
+            e.preventDefault(); // ඕනෑම auto-submit එකක් නවත්වනවා
+            
             const filePath = document.getElementById("videoSelect").value;
             const title = document.getElementById("videoTitle").value;
             const description = document.getElementById("videoDesc").value;
             const loading = document.getElementById("uploadLoading");
             const statusBox = document.getElementById("uploadStatus");
             
-            if (!filePath) {
-                alert("කරුණාකර මුලින්ම වීඩියෝ එකක් තෝරන්න!");
+            if (!filePath || !title || !description) {
+                alert("කරුණාකර වීඩියෝවක් තෝරා, Title සහ Description සම්පූර්ණ කරන්න!");
                 return;
             }
             
+            // Loading සක්‍රීය කිරීම සහ පරණ මැසේජ් මැකීම
             loading.style.display = "block";
             statusBox.style.display = "none";
             statusBox.className = "status-box";
@@ -174,28 +175,30 @@
                     method: "POST",
                     body: formData
                 });
+                
                 const data = await response.json();
                 
                 if (response.ok) {
                     statusBox.textContent = `🎉 ${data.message}`;
                     statusBox.classList.add("status-success");
+                    // Form එක ක්ලියර් කරනවා
                     document.getElementById("videoTitle").value = "";
                     document.getElementById("videoDesc").value = "";
                     refreshVideoList();
                 } else {
-                    // API එකෙන් එවන සම්පූර්ණ Error එක මෙතන පෙන්වනවා
+                    // Python Traceback එක ඇතුළුව එන ලොකු Error එක මෙතන දිගටම පෙන්වනවා
                     statusBox.textContent = `❌ YouTube Upload Error:\n${data.detail}`;
                     statusBox.classList.add("status-error");
                 }
             } catch (err) {
-                statusBox.textContent = "❌ සර්වර් එක සමඟ තිබුණු සම්බන්ධතාවය බිඳ වැටුණා!";
+                statusBox.textContent = "❌ සර්වර් එක සමඟ තිබුණු සම්බන්ධතාවය බිඳ වැටුණා! (Server/FastAPI Crashed)";
                 statusBox.classList.add("status-error");
             } finally {
                 loading.style.display = "none";
             }
         });
 
-        // පේජ් එක මුලින්ම ලෝඩ් වෙනකොට ලිස්ට් එක ගන්නවා
+        // පේජ් එක ලෝඩ් වෙද්දීම ලිස්ට් එක අප්ඩේට් කරනවා
         refreshVideoList();
     </script>
 </body>

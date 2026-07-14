@@ -21,7 +21,7 @@ app.add_middleware(
 
 SCOPES = ['https://www.googleapis.com/auth/youtube.upload']
 VIDEO_DIR = "downloaded_videos"
-CONFIG_FILE = "config.json" # 💡 අපි කියවන්න යන config ෆයිල් එක
+CONFIG_FILE = "config.json" # 💡 GitHub එකට අප්ලෝඩ් කරපු ෆයිල් එක
 
 if not os.path.exists(VIDEO_DIR):
     os.makedirs(VIDEO_DIR)
@@ -37,21 +37,13 @@ class UploadRequest(BaseModel):
     is_series: bool
     auth_code: str
 
-# 🔐 config.json ෆයිල් එකෙන් Google Secret එක කියවන ලොජික් එක
+# 🔐 කෙළින්ම config.json ෆයිල් එක ලෝඩ් කරන ලොජික් එක
 def load_google_config():
     if not os.path.exists(CONFIG_FILE):
-        raise HTTPException(
-            status_code=500, 
-            detail="config.json ෆයිල් එක සොයාගත නොහැක! කරුණාකර config.example.json එක config.json ලෙස වෙනස් කර ඔබේ දත්ත ඇතුළත් කරන්න."
-        )
-    
+        raise HTTPException(status_code=500, detail="config.json ෆයිල් එක සර්වර් එකේ සොයාගත නොහැක!")
     try:
         with open(CONFIG_FILE, 'r') as f:
-            config_data = json.load(f)
-            # Google Client Secret එක තියෙන්නේ මේ කී එක ඇතුළේ වෙන්න ඕනේ
-            if "web" not in config_data and "installed" not in config_data:
-                raise HTTPException(status_code=500, detail="config.json හි ව්‍යුහය (Structure) වැරදියි!")
-            return config_data
+            return json.load(f)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Config ෆයිල් එක කියවීමේ දෝෂයක්: {str(e)}")
 
@@ -76,7 +68,7 @@ def download_video(data: DownloadRequest):
 # 🔑 2. YOUTUBE LOGIN ලින්ක් එක ගන්න API එක
 @app.get("/get-auth-url")
 def get_auth_url():
-    client_config = load_google_config() # 💡 ෆයිල් එකෙන් ගන්නේ
+    client_config = load_google_config()
     
     flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_config(
         client_config, scopes=SCOPES)
@@ -94,7 +86,7 @@ def upload_and_cut_video(data: UploadRequest):
         raise HTTPException(status_code=404, detail="වීඩියෝ ෆයිල් එක සර්වර් එකේ නැත!")
         
     try:
-        client_config = load_google_config() # 💡 ෆයිල් එකෙන් ගන්නේ
+        client_config = load_google_config()
         
         flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_config(
             client_config, scopes=SCOPES)
@@ -121,7 +113,7 @@ def upload_and_cut_video(data: UploadRequest):
         while response is None:
             status, response = request.next_chunk()
             
-        # 🔥 UPLOAD වුණු ගමන් සර්වර් එකෙන් ඩිලීට් කිරීම
+        # 🔥 UPLOAD වුණු ගමන් සර්වර් එකෙන් ඩිලීට් කිරීම (Cut)
         if os.path.exists(file_path):
             os.remove(file_path)
             

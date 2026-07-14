@@ -1,44 +1,30 @@
 import os
-import json
-import secrets
-import hashlib
-import base64
-from fastapi import FastAPI, HTTPException, Request
+import glob
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from google_auth_oauthlib.flow import Flow
 import googleapiclient.discovery
-import googleapiclient.errors
 from googleapiclient.http import MediaFileUpload
 
 app = FastAPI()
 
 SCOPES = ['https://www.googleapis.com/auth/youtube.upload']
+VIDEO_DIR = "videos"
 
-# 💡 මතකය නැති නොවෙන්න ෆයිල් එකක සේව් කරන Helper Functions
-VERIFIER_FILE = "verifier_state.txt"
-LAST_VIDEO_FILE = "last_video_state.txt"
-
-def save_state(filename, data):
-    with open(filename, "w") as f:
-        f.write(data)
-
-def load_state(filename):
-    if os.path.exists(filename):
-        with open(filename, "r") as f:
-            return f.read().strip()
-    return ""
+# 📁 වීඩියෝ සේව් වෙන්න වෙනම ෆෝල්ඩර් එකක් හදනවා
+if not os.path.exists(VIDEO_DIR):
+    os.makedirs(VIDEO_DIR)
 
 class DownloadRequest(BaseModel):
     url: str
-    custom_name: str = "video"
+    custom_name: str
 
 class UploadRequest(BaseModel):
-    filename: str
+    video_filename: str
     title: str
     description: str
-    is_series: bool = False
     auth_code: str
 
 if os.path.exists("frontend"):
@@ -52,14 +38,10 @@ def read_root():
     return {"message": "Frontend index.html missing!"}
 
 def get_credentials_path():
-    possible_names = ["config.json", "credentials.json", "client_secret.json"]
-    for name in possible_names:
-        if os.path.exists(name):
-            return name
-    for name in possible_names:
-        parent_path = os.path.join("..", name)
-        if os.path.exists(parent_path):
-            return parent_path
+    for name in ["config.json", "credentials.json", "client_secret.json"]:
+        if os.path.exists(name): return name
+        parent = os.path.join("..", name)
+        if os.path.exists(parent): return parent
     return None
 
 # 🔑 1. YOUTUBE AUTH URL එක සෑදීම
@@ -67,138 +49,88 @@ def get_credentials_path():
 def get_auth_url():
     json_path = get_credentials_path()
     if not json_path:
-        raise HTTPException(status_code=500, detail="config.json ෆයිල් එක සොයාගත නොහැක!")
-        
+        raise HTTPException(status_code=500, detail="config.json ෆයිල් එක නැත!")
     try:
         flow = Flow.from_client_secrets_file(
             json_path,
             scopes=SCOPES,
-            redirect_uri="http://localhost:8000/oauth2callback"
+            redirect_uri="urn:ietf:wg:oauth:2.0:oob" # 💡 මේක දැම්මාම ලින්ක් කපන්න ඕන නෑ, කෙළින්ම කෝඩ් එක ස්ක්‍රීන් එකේ පෙන්නනවා!
         )
-        
-        # 💡 මෙතනදී සාදන Code Verifier එක සදහටම මතක හිටින්න ෆයිල් එකක ලියනවා
-        code_verifier = secrets.token_urlsafe(64)
-        save_state(VERIFIER_FILE, code_verifier)
-        
-        code_challenge = base64.urlsafe_b64encode(
-            hashlib.sha256(code_verifier.encode('utf-8')).digest()
-        ).decode('utf-8').rstrip('=')
-        
-        auth_url, _ = flow.authorization_url(
-            access_type='offline',
-            include_granted_scopes='true',
-            code_challenge=code_challenge,
-            code_challenge_method='S256'
-        )
+        auth_url, _ = flow.authorization_url(access_type='offline', prompt='consent')
         return {"auth_url": auth_url}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/download-status-check")
-def check():
-    return {"status": "ready"}
-
-# 📥 2. VIDEO DOWNLOAD
+# 📥 2. වීඩියෝ එක ඩිරෙක්ට් ලින්ක් එකෙන් වෙනම ෆෝල්ඩර් එකට දාගැනීම
 @app.post("/download")
 async def download_video(req: DownloadRequest):
     safe_name = "".join([c for c in req.custom_name if c.isalpha() or c.isdigit() or c in ' _-']).strip()
     if not safe_name:
-        safe_name = "video"
-    filename = f"{safe_name}.mp4"
+        raise HTTPException(status_code=400, detail="කරුණාකර වලංගු නමක් ඇතුළත් කරන්න!")
+    
+    filename = os.path.join(VIDEO_DIR, f"{safe_name}.mp4")
     
     try:
-        print(f"Downloading video from: {req.url}")
+        print(f"Downloading to folder: {filename}")
         os.system(f'yt-dlp -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 "{req.url}" -o "{filename}"')
         
         if not os.path.exists(filename):
-            raise HTTPException(status_code=500, detail="yt-dlp මඟින් වීඩියෝව බාගැනීමට අපොහොසත් විය!")
-            
-        # 💡 බාගත්ත වීඩියෝ එකේ නමත් ෆයිල් එකක සේව් කරලා තියාගන්නවා ආරක්ෂාවට
-        save_state(LAST_VIDEO_FILE, filename)
-        return {"message": f"වීඩියෝව සාර්ථකව සර්වර් එකට බාගත්තා! (නම: {filename})"}
+            raise HTTPException(status_code=500, detail="බාගැනීම අසාර්ථකයි!")
+        return {"message": f"🔥 '{safe_name}.mp4' සාර්ථකව {VIDEO_DIR} ෆෝල්ඩර් එකට බාගත්තා!"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# 📤 3. YOUTUBE UPLOAD (ලෙඩ ඔක්කොම ෆික්ස් කරපු කොටස)
+# 📂 3. දැනට ෆෝල්ඩර් එකේ තියෙන වීඩියෝ ලැයිස්තුව ලබාගැනීම
+@app.get("/list-videos")
+def list_videos():
+    files = glob.glob(os.path.join(VIDEO_DIR, "*.mp4"))
+    video_list = [os.path.basename(f) for f in files]
+    return {"videos": video_list}
+
+# 📤 4. තෝරාගත් වීඩියෝව අප්ලෝඩ් කර ඔටෝම කැපීම (YT UPLOAD & CUT)
 @app.post("/upload")
 async def upload_video(req: UploadRequest):
-    # 💡 ෆයිල් එකෙන් Code Verifier එක කියවා ගැනීම
-    current_code_verifier = load_state(VERIFIER_FILE)
-    if not current_code_verifier:
-        raise HTTPException(status_code=400, detail="සර්වර් එකේ Code Verifier එක සොයාගත නොහැක! කරුණාකර නැවත 'Link YouTube Account' ලින්ක් එක ගන්න.")
-
-    # 💡 සර්වර් එක රීෆ්‍රෙෂ් වුණත් ඇත්තම ෆයිල් නම මෙතනින් චෙක් කරනවා
-    target_filename = req.filename
-    if not os.path.exists(target_filename):
-        backup_filename = load_state(LAST_VIDEO_FILE)
-        if backup_filename and os.path.exists(backup_filename):
-            target_filename = backup_filename
-        else:
-            raise HTTPException(status_code=404, detail=f"දෝෂයකි: ඩවුන්ලෝඩ් වුණු වීඩියෝ ෆයිල් එක ({target_filename}) සර්වර් එකේ සොයාගත නොහැක!")
+    full_path = os.path.join(VIDEO_DIR, req.video_filename)
+    if not os.path.exists(full_path):
+        raise HTTPException(status_code=404, detail="තෝරාගත් වීඩියෝ ෆයිල් එක සර්වර් එකේ නැත!")
 
     json_path = get_credentials_path()
-    if not json_path:
-        raise HTTPException(status_code=500, detail="config.json ෆයිල් එක සොයාගත නොහැක!")
-
     try:
-        flow = Flow.from_client_secrets_file(
-            json_path,
-            scopes=SCOPES,
-            redirect_uri="http://localhost:8000/oauth2callback"
-        )
-        
-        flow.fetch_token(code=req.auth_code, code_verifier=current_code_verifier)
+        flow = Flow.from_client_secrets_file(json_path, scopes=SCOPES, redirect_uri="urn:ietf:wg:oauth:2.0:oob")
+        flow.fetch_token(code=req.auth_code)
         credentials = flow.credentials
 
-        youtube = googleapiclient.discovery.build(
-            "youtube", "v3", credentials=credentials
-        )
+        youtube = googleapiclient.discovery.build("youtube", "v3", credentials=credentials)
 
         body = {
             'snippet': {
                 'title': req.title,
                 'description': req.description,
-                'tags': ['auto_upload'],
                 'categoryId': '22'
             },
             'status': {
-                'privacyStatus': 'private' 
+                'privacyStatus': 'private'
             }
         }
 
-        # ඇත්තම ඉලක්කගත ෆයිල් එක අප්ලෝඩ් කිරීම
-        media = MediaFileUpload(target_filename, chunksize=1024*1024, resumable=True, mimetype='video/mp4')
+        media = MediaFileUpload(full_path, chunksize=1024*1024, resumable=True, mimetype='video/mp4')
+        request = youtube.videos().insert(part=','.join(body.keys()), body=body, media_body=media)
         
-        request = youtube.videos().insert(
-            part=','.join(body.keys()),
-            body=body,
-            media_body=media
-        )
-        
-        print(f"Uploading {target_filename} chunks to YouTube...")
+        print(f"Uploading {req.video_filename} to YouTube...")
         response = None
         while response is None:
             status, response = request.next_chunk()
-            if status:
-                print(f"Uploaded {int(status.progress() * 100)}%")
 
         video_id = response.get("id", "UNKNOWN")
-        youtube_link = f"https://youtu.be/{video_id}"
         
-        # සාර්ථකව අප්ලෝඩ් වුණාම සර්වර් එකෙන් File එක මකා දැමීම
-        if os.path.exists(target_filename):
-            os.remove(target_filename)
-            print(f"🗑️ සර්වර් එක පිරිසිදු කර {target_filename} මකා දමන ලදී.")
-            
-        # සේව් කරපු ස්ටේට් ෆයිල්ස් ටිකත් ක්ලීන් කරනවා
-        if os.path.exists(VERIFIER_FILE): os.remove(VERIFIER_FILE)
-        if os.path.exists(LAST_VIDEO_FILE): os.remove(LAST_VIDEO_FILE)
+        # ✂️ සීයට සීයක් අප්ලෝඩ් වුණාම සර්වර් එකෙන් ඔටෝම කැපෙනවා (Delete වෙනවා)
+        if os.path.exists(full_path):
+            os.remove(full_path)
+            print(f"🗑️ {req.video_filename} සර්වර් එකෙන් ඔටෝම මකා දමන ලදී!")
 
         return {
-            "message": f"🔥 සාර්ථකයි! වීඩියෝව YouTube වෙත ගියා. සර්වර් එකෙන් සදහටම මැකී ගියා (Cut & Cleaned)!",
-            "video_id": video_id,
-            "youtube_url": youtube_link
+            "message": f"🔥 සාර්ථකයි! '{req.video_filename}' YouTube එකට ගියා, සර්වර් එකෙන් කැපුනා!",
+            "youtube_url": f"https://youtu.be/{video_id}"
         }
-
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

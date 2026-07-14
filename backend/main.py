@@ -117,4 +117,4 @@ def read_index():
     index_path = os.path.join("frontend", "index.html")
     if os.path.exists(index_path):
         return FileResponse(index_path)
-    return {"message": "Frontend files not found inside 'frontend' folder!"}ව්
+    return {"message": "Frontend files not found inside 'frontend' folder!"}

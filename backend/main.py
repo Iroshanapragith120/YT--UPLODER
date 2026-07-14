@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# 🌐 CORS Setup (ලෙඩ නැතුව Frontend එකයි Backend එකයි කනෙක්ට් කරන්න)
+# 🌐 CORS Setup - Frontend එකයි Backend එකයි ලෙඩ නැතුව කනෙක්ට් කරන්න
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,7 +21,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 📂 බාන වීඩියෝ තියාගන්න ෆෝල්ඩර් එක
+# 📂 බාන වීඩියෝ Cloud එකේ සේව් වෙන ෆෝල්ඩර් එක
 DOWNLOAD_DIR = "downloads"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
@@ -34,46 +34,59 @@ def get_auth_token():
         token = f.read().strip()
     return token
 
-# 📥 1. Video Download API (උඹේ Frontend එක ඉල්ලන නියම ලින්ක් එක: /download)
+# =====================================================================
+# 📥 1. DIRECT LINK DOWNLOAD API
+# (ලින්ක් එක දුන්නම වීඩියෝ එක Cloud එකට විතරක් බාන වෙනමම API එකක්)
+# =====================================================================
 @app.post("/download")
 async def download_video(url: str = Form(...)):
     try:
-        print(f"📥 වීඩියෝ එක ඩවුන්ලොඩ් වෙනවා: {url}")
+        print(f"📥 වීඩියෝ එක Cloud එකට බානවා: {url}")
         
+        # වීඩියෝ එකට අද්විතීය නමක් දීම
         file_name = f"video_{int(asyncio.get_event_loop().time())}.mp4"
         file_path = os.path.join(DOWNLOAD_DIR, file_name)
         
-        response = requests.get(url, stream=True, timeout=60)
+        # Direct link එකෙන් වීඩියෝ එක download කිරීම
+        response = requests.get(url, stream=True, timeout=120)
         if response.status_code != 200:
-            raise Exception("වීඩියෝ ලින්ක් එක වැඩ කරන්නේ නැත!")
+            raise Exception("ලබාදුන් වීඩියෝ ලින්ක් එක වැඩ කරන්නේ නැත!")
             
         with open(file_path, "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):
                 if chunk:
                     f.write(chunk)
                     
+        print(f"✓ වීඩියෝ එක සාර්ථකව Cloud එකේ සේව් වුණා: {file_path}")
         return {
             "status": "success", 
-            "message": "වීඩියෝ එක සාර්ථකව බාගත්තා!", 
+            "message": "වීඩියෝ එක සාර්ථකව Cloud එකට බාගත්තා! දැන් පහළ ලැයිස්තුවෙන් තෝරා අප්ලෝඩ් කරන්න.", 
             "file_path": file_path,
             "file_name": file_name
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# 📋 2. Video List API (උඹේ Frontend එක ඉල්ලන නියම ලින්ක් එක: /list-videos)
+# =====================================================================
+# 📋 2. VIDEO LIST API
+# (Cloud එකට බාපු වීඩියෝ ටික Frontend එකේ පෙන්නන්න දෙන ලින්ක් එක)
+# =====================================================================
 @app.get("/list-videos")
 async def list_videos():
     try:
         if not os.path.exists(DOWNLOAD_DIR):
             return []
         files = os.listdir(DOWNLOAD_DIR)
+        # downloads ෆෝල්ඩර් එකේ තියෙන .mp4 ෆයිල් ටික ලැයිස්තුගත කිරීම
         video_list = [{"name": f, "path": os.path.join(DOWNLOAD_DIR, f)} for f in files if f.endswith('.mp4')]
         return video_list
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# 🚀 3. YouTube Upload API (උඹේ Frontend එක ඉල්ලන නියම ලින්ක් එක: /upload)
+# =====================================================================
+# 🚀 3. YOUTUBE UPLOAD API
+# (ලැයිස්තුවෙන් තෝරලා SAPISIDHASH එක හරහා YT එකට විතරක් අප්ලෝඩ් කරන API එක)
+# =====================================================================
 @app.post("/upload")
 async def upload_to_youtube(
     file_path: str = Form(...), 
@@ -81,13 +94,15 @@ async def upload_to_youtube(
     description: str = Form(...)
 ):
     try:
+        # 1. auth.txt එකෙන් SAPISIDHASH එක කියවනවා
         token = get_auth_token()
-        print(f"🚀 Upload ආරම්භ කරා: {title}")
+        print(f"🚀 YouTube Upload ආරම්භ කරා: {title}")
         
+        # 2. ෆයිල් එක Cloud එකේ තියෙනවද බලනවා
         if not os.path.exists(file_path):
-            raise Exception("අදාළ වීඩියෝ ෆයිල් එක සර්වර් එකේ නැත!")
+            raise Exception("අදාළ වීඩියෝ ෆයිල් එක Cloud (Server) එකේ සොයාගත නොහැක!")
 
-        # youtube_upload_no_api Script එක හරහා Upload කිරීම
+        # 3. සෙලීනියම් නැතුව Direct Request එකෙන් අප්ලෝඩ් කරන ස්ක්‍රිප්ට් එක ලෝඩ් කිරීම
         from youtube_upload_no_api import YoutubeUpload
         
         uploader = YoutubeUpload(auth_file="auth.txt")
@@ -99,16 +114,19 @@ async def upload_to_youtube(
         )
 
         if success:
+            # අප්ලෝඩ් වුණාට පස්සේ Cloud එකේ ඉඩ ඉතුරු කරන්න බාපු ෆයිල් එක මකනවා
             if os.path.exists(file_path):
                 os.remove(file_path)
-            return {"status": "success", "message": f"'{title}' වීඩියോ එක සාර්ථකව YouTube එකට අප්ලෝඩ් වුණා! 🎉"}
+            return {"status": "success", "message": f"'{title}' වීඩියෝ එක සාර්ථකව YouTube එකට අප්ලෝඩ් වුණා! 🎉"}
         else:
-            raise Exception("YouTube එකට තල්ලු කිරීම අසාර්ථක වුණා.")
+            raise Exception("YouTube එකට අප්ලෝඩ් කිරීම අසාර්ථක වුණා.")
             
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# 🗂 "frontend" ෆෝල්ඩර් එක Static Files විදිහට මවුන්ට් කිරීම
+# =====================================================================
+# 🗂 4. FRONTEND STATIC FILE ROUTER
+# =====================================================================
 app.mount("/frontend", StaticFiles(directory="../frontend"), name="frontend")
 
 @app.get("/")
@@ -122,4 +140,4 @@ async def read_index():
 with open(main_py_path, "w") as f:
     f.write(full_code)
 
-print("🎯 නියමයි මචන්! Frontend එකට හරියන විදිහට (404 Error නැතිවෙන්න) main.py එක සම්පූර්ණයෙන්ම හැදුවා.")
+print("🎯 සාර්ථකයි මචන්! හැම API එකක්ම (Download, List, Upload) වෙන වෙනම සම්පූර්ණයෙන්ම ඇතුළත් කරලා main.py එක හැදුවා.")

@@ -1,0 +1,145 @@
+:root {
+    --bg-color: #0f0f0f;
+    --card-bg: #1f1f1f;
+    --accent-color: #ff0000;
+    --text-color: #ffffff;
+}
+
+body {
+    margin: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+
+/* Navbar Style */
+.navbar {
+    display: flex;
+    align-items: center;
+    background-color: #161616;
+    padding: 15px 20px;
+    border-bottom: 1px solid #2d2d2d;
+}
+
+.menu-icon {
+    font-size: 24px;
+    cursor: pointer;
+    margin-right: 20px;
+}
+
+.logo {
+    font-size: 20px;
+    font-weight: bold;
+    color: var(--accent-color);
+    letter-spacing: 2px;
+}
+
+/* Sidebar Style */
+.sidebar {
+    height: 100%;
+    width: 0;
+    position: fixed;
+    z-index: 100;
+    top: 0;
+    left: 0;
+    background-color: #161616;
+    overflow-x: hidden;
+    transition: 0.3s;
+    padding-top: 60px;
+    border-right: 1px solid #2d2d2d;
+}
+
+.sidebar h2 {
+    padding: 0 20px;
+    font-size: 18px;
+}
+
+.close-btn {
+    position: absolute;
+    top: 15px;
+    right: 25px;
+    font-size: 36px;
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+}
+
+.no-videos {
+    padding: 20px;
+    color: #888;
+}
+
+/* Home Grid Styles */
+.container {
+    max-width: 900px;
+    margin: 50px auto;
+    padding: 20px;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.welcome-text {
+    text-align: center;
+    margin-bottom: 50px;
+}
+
+.box-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+}
+
+.box {
+    background-color: var(--card-bg);
+    padding: 30px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: transform 0.2s, border 0.2s;
+    border: 2px solid transparent;
+}
+
+.box:hover {
+    transform: translateY(-5px);
+}
+
+.card-1:hover { border-color: #00ffcc; }
+.card-2:hover { border-color: #ff0055; }
+
+/* Form Styles */
+.form-group {
+    margin-bottom: 25px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 10px;
+    font-weight: bold;
+}
+
+input[type="text"] {
+    width: 100%;
+    padding: 12px;
+    border-radius: 6px;
+    border: 1px solid #444;
+    background-color: #111;
+    color: white;
+    box-sizing: border-box;
+}
+
+.btn {
+    background-color: var(--accent-color);
+    color: white;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    margin-right: 10px;
+}
+
+.btn-back {
+    background-color: #444;
+}

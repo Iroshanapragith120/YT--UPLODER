@@ -1,6 +1,7 @@
 import os
 import requests
 import asyncio
+import traceback  # Error එක මොකක්ද කියලා සවිස්තරාත්මකව ගන්න
 from fastapi import FastAPI, HTTPException, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -8,7 +9,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# 🌐 CORS Setup - Frontend එකයි Backend එකයි ලෙඩ නැතුව කනෙක්ට් කරන්න
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,7 +17,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 📂 බාන වීඩියෝ සේව් වෙන තැන (Colab storage එක ඇතුළේ backend/downloads)
 DOWNLOAD_DIR = "/content/YT--UPLODER/backend/downloads"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
@@ -25,25 +24,35 @@ os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 def get_auth_token():
     auth_file = "/content/YT--UPLODER/backend/auth.txt"
     if not os.path.exists(auth_file):
-        raise HTTPException(status_code=500, detail="auth.txt ෆයිල් එක backend ෆෝල්ඩර් එකේ නැත!")
+        raise HTTPException(status_code=500, detail="auth.txt file not found in backend folder!")
     with open(auth_file, "r") as f:
         return f.read().strip()
 
 # =====================================================================
-# 📥 1. DIRECT LINK DOWNLOAD API (වීඩියෝ එක Cloud එකට බෑම)
+# 📥 1. DIRECT LINK DOWNLOAD API (Custom Name එකත් එක්ක)
 # =====================================================================
 @app.post("/download")
-async def download_video(url: str = Form(...)):
+async def download_video(
+    url: str = Form(...),
+    custom_name: str = Form(None)  # Frontend එකෙන් එන Custom Name එක
+):
     try:
-        print(f"📥 වීඩියෝ එක Cloud එකට බානවා: {url}")
+        print(f"📥 වීඩියෝ එක බානවා: {url}")
         
-        # වීඩියෝ එකට නමක් දීම
-        file_name = f"video_{int(asyncio.get_event_loop().time())}.mp4"
+        # නමක් දුන්නේ නැත්නම් auto name එකක් හදනවා
+        if custom_name and custom_name.strip():
+            # නමට අගින් .mp4 නැත්නම් ඒක එකතු කරනවා
+            file_name = custom_name.strip()
+            if not file_name.endswith(".mp4"):
+                file_name += ".mp4"
+        else:
+            file_name = f"video_{int(asyncio.get_event_loop().time())}.mp4"
+            
         file_path = os.path.join(DOWNLOAD_DIR, file_name)
         
         response = requests.get(url, stream=True, timeout=120)
         if response.status_code != 200:
-            raise Exception("ලබාදුන් ලින්ක් එක වැඩ කරන්නේ නැත!")
+            raise Exception("ලබාදුන් වීඩියෝ ලින්ක් එක වැඩ කරන්නේ නැත!")
             
         with open(file_path, "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):
@@ -53,15 +62,17 @@ async def download_video(url: str = Form(...)):
         print(f"✓ වීඩියෝ එක සාර්ථකව සේව් වුණා: {file_path}")
         return {
             "status": "success", 
-            "message": "වීඩියෝ එක සාර්ථකව Cloud එකට බාගත්තා!", 
+            "message": f"'{file_name}' වීඩියෝව සාර්ථකව Cloud එකට බාගත්තා!", 
             "file_path": file_path,
             "file_name": file_name
         }
     except Exception as e:
+        # Error එක Console එකෙත් පෙන්වනවා
+        print(f"❌ බාගැනීමේ දෝෂය: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # =====================================================================
-# 📋 2. VIDEO LIST API (බාපු වීඩියෝ ලිස්ට් එක Frontend එකට යැවීම)
+# 📋 2. VIDEO LIST API
 # =====================================================================
 @app.get("/list-videos")
 async def list_videos():
@@ -83,7 +94,7 @@ async def list_videos():
         raise HTTPException(status_code=500, detail=str(e))
 
 # =====================================================================
-# 🚀 3. YOUTUBE UPLOAD API (තෝරාගත් වීඩියෝව YT එකට තල්ලු කිරීම)
+# 🚀 3. YOUTUBE UPLOAD API (සවිස්තරාත්මක Error Tracking සමඟ)
 # =====================================================================
 @app.post("/upload")
 async def upload_to_youtube(
@@ -96,29 +107,41 @@ async def upload_to_youtube(
         print(f"🚀 YouTube Upload ආරම්භ කළා: {title} | File: {file_path}")
         
         if not os.path.exists(file_path):
-            raise Exception("අදාළ වීඩියෝ ෆයිල් එක සර්වර් එකේ සොයාගත නොහැක!")
+            raise Exception(f"සර්වර් එකේ මේ වීඩියෝ එක නැත: {file_path}")
 
-        # අපේ No-API uploader script එක ලෝඩ් කිරීම
-        from youtube_upload_no_api import YoutubeUpload
+        # YouTube Upload Script එක ලෝඩ් කිරීම
+        try:
+            from youtube_upload_no_api import YoutubeUpload
+        except ImportError as imp_err:
+            raise Exception(f"youtube_upload_no_api.py ෆයිල් එක backend ෆෝල්ඩර් එකේ නැත! (Import Error: {str(imp_err)})")
         
         uploader = YoutubeUpload(auth_file="/content/YT--UPLODER/backend/auth.txt")
-        success = uploader.upload(
-            file_path=file_path,
-            title=title,
-            description=description,
-            privacy_status="public"
-        )
+        
+        # මෙතනදී Upload එක ඇතුළේ වෙන වැරදි වෙනම අල්ලගන්නවා
+        try:
+            success = uploader.upload(
+                file_path=file_path,
+                title=title,
+                description=description,
+                privacy_status="public"
+            )
+        except Exception as upload_inner_err:
+            # Upload function එක ඇතුළේ සිද්ධ වුණු වැරැද්දේ මුළු විස්තරයම ගන්නවා
+            detailed_err = traceback.format_exc()
+            raise Exception(f"Upload process එක ඇතුළත දෝෂයක්: {str(upload_inner_err)}\n\nTraceback:\n{detailed_err}")
 
         if success:
-            # අප්ලෝඩ් වුණාට පස්සේ ඉඩ ඉතුරු කරගන්න සර්වර් එකෙන් වීඩියෝව මකනවා
             if os.path.exists(file_path):
                 os.remove(file_path)
             return {"status": "success", "message": f"'{title}' වීඩියෝව සාර්ථකව YouTube එකට අප්ලෝඩ් වුණා! 🎉"}
         else:
-            raise Exception("YouTube එකට අප්ලෝඩ් කිරීම අසාර්ථක වුණා.")
+            raise Exception("YouTube Upload Script එක False ප්‍රතිචාරයක් ලබා දුන්නා. (Cookies/Auth ප්‍රශ්නයක් විය හැක)")
             
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # වැරැද්දේ විස්තරය Console එකේ Print කරලා Frontend එකටත් යවනවා
+        error_details = traceback.format_exc()
+        print(f"❌ YouTube Upload එක අසාර්ථක විය:\n{error_details}")
+        raise HTTPException(status_code=500, detail=f"{str(e)}")
 
 # 🗂 4. FRONTEND STATIC FILE ROUTER
 app.mount("/frontend", StaticFiles(directory="/content/YT--UPLODER/frontend"), name="frontend")

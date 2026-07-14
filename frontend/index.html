@@ -15,8 +15,6 @@
         button:hover { background: #0369a1; }
         .btn-upload { background: #10b981; }
         .btn-upload:hover { background: #059669; }
-        .btn-refresh { background: #475569; width: auto; margin: 0; padding: 8px 15px; font-size: 14px; }
-        .btn-refresh:hover { background: #64748b; }
         .loading { display: none; color: #f59e0b; font-weight: bold; text-align: center; margin: 10px 0; }
         
         /* Inline Status Messages */
@@ -49,16 +47,12 @@
     <!-- දෙවන පියවර: YouTube එකට අප්ලෝඩ් කිරීම -->
     <div class="card">
         <h1>🚀 2. බාපු වීඩියෝ YouTube එකට අප්ලෝඩ් කරන්න</h1>
-        <p>සිලෙක්ට් කරලා YouTube එකට තල්ලු කරන්න.</p>
+        <p>වීඩියෝවේ සර්වර් පාත් එක ඇතුළත් කර YouTube එකට තල්ලු කරන්න.</p>
         
         <div id="uploadFormSection">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                <label style="margin: 0;">Select Video from Cloud:</label>
-                <button type="button" class="btn-refresh" onclick="refreshVideoList()">🔄 Refresh List</button>
-            </div>
-            <select id="videoSelect" required>
-                <option value="">-- 🔄 Refresh කර වීඩියෝවක් තෝරන්න --</option>
-            </select>
+            <!-- 🔄 Refresh Dropdown එක සම්පූර්ණයෙන්ම ඉවත් කර ස්ථිර නිවැරදි Input එකක් දැම්මා -->
+            <label for="videoSelect">Video File Path (බාගත්ත වීඩියෝවේ සර්වර් ලිපිනය):</label>
+            <input type="text" id="videoSelect" placeholder="/content/YT--UPLODER/backend/downloads/ವීඩියෝ_නම.mp4" required>
             
             <label for="videoTitle">YouTube Title:</label>
             <input type="text" id="videoTitle" placeholder="වීඩියෝ මාතෘකාව" required>
@@ -76,36 +70,9 @@
     <script>
         const API_BASE = window.location.origin;
 
-        // 1. Dropdown Refresh කිරීම
-        async function refreshVideoList() {
-            const select = document.getElementById("videoSelect");
-            select.innerHTML = '<option value="">⏳ පූරණය වෙමින් පවතී...</option>';
-            
-            try {
-                const response = await fetch(`${API_BASE}/list-videos`);
-                const videos = await response.json();
-                
-                select.innerHTML = '<option value="">-- වීඩියෝවක් තෝරන්න --</option>';
-                
-                if (videos.length === 0) {
-                    select.innerHTML = '<option value="">-- Cloud එකේ දැනට වීඩියෝ නැත --</option>';
-                    return;
-                }
-                
-                videos.forEach(vid => {
-                    const opt = document.createElement("option");
-                    opt.value = vid.path;
-                    opt.textContent = `${vid.name} (${vid.size})`;
-                    select.appendChild(opt);
-                });
-            } catch (err) {
-                select.innerHTML = '<option value="">❌ ලිස්ට් එක ගන්න බැරි වුණා!</option>';
-            }
-        }
-
-        // 2. වීඩියෝ බාන බටන් එක ක්ලික් කිරීම
+        // 1. වීඩියෝ බාන බටන් එක ක්ලික් කිරීම
         document.getElementById("submitDownloadBtn").addEventListener("click", async (e) => {
-            e.preventDefault(); // බ්‍රවුසර් එක Action එක Cancel කිරීම වළක්වයි
+            e.preventDefault();
             const url = document.getElementById("videoUrl").value;
             const customName = document.getElementById("customName").value;
             const loading = document.getElementById("downloadLoading");
@@ -134,6 +101,12 @@
                 if (response.ok) {
                     statusBox.textContent = `✓ ${data.message}`;
                     statusBox.className = "status-box status-success";
+                    
+                    // වීඩියෝව බාගත්ත ගමන්, අප්ලෝඩ් කරන තැනට Auto-Fill කරනවා පහසුවට
+                    if(data.file_path) {
+                        document.getElementById("videoSelect").value = data.file_path;
+                    }
+                    
                     document.getElementById("videoUrl").value = "";
                     document.getElementById("customName").value = "";
                 } else {
@@ -148,9 +121,9 @@
             }
         });
 
-        // 3. YouTube Upload බටන් එක ක්ලික් කිරීම (FIXED - ලෝඩින් මැසේජ් එක නැතිවෙන්නේ නැත)
+        // 2. YouTube Upload බටන් එක ක්ලික් කිරීම
         document.getElementById("submitUploadBtn").addEventListener("click", async (e) => {
-            e.preventDefault(); // 🌟 බ්‍රවුසර් එකෙන් බටන් එකේ ක්ලික් එක නැති කර දැමීම වළක්වයි! ලෝඩින් මැසේජ් එක ස්ථිරවම පවතී.
+            e.preventDefault();
             
             const filePath = document.getElementById("videoSelect").value;
             const title = document.getElementById("videoTitle").value;
@@ -159,11 +132,10 @@
             const statusBox = document.getElementById("uploadStatus");
             
             if (!filePath || !title || !description) {
-                alert("කරුණාකර වීඩියෝවක් තෝරා, Title සහ Description සම්පූර්ණ කරන්න!");
+                alert("කරුණාකර වීඩියෝ පථය (Path), Title සහ Description සම්පූර්ණ කරන්න!");
                 return;
             }
             
-            // ලෝඩින් ස්ක්‍රීන් එක පෙන්වීම ආරම්භ කරයි
             loading.style.display = "block";
             statusBox.style.display = "none";
             statusBox.className = "status-box";
@@ -184,6 +156,7 @@
                 if (response.ok) {
                     statusBox.textContent = `🎉 ${data.message}`;
                     statusBox.className = "status-box status-success";
+                    document.getElementById("videoSelect").value = "";
                     document.getElementById("videoTitle").value = "";
                     document.getElementById("videoDesc").value = "";
                 } else {
@@ -194,7 +167,6 @@
                 statusBox.textContent = "❌ සර්වර් එක සමඟ තිබුණු සම්බන්ධතාවය බිඳ වැටුණා! (FastAPI / Colab Server Offline)";
                 statusBox.className = "status-box status-error";
             } finally {
-                // අප්ලෝඩ් එක ඉවර වුණාම හෝ Error එකක් ආවම විතරක් ලෝඩින් එක අයින් කරයි
                 loading.style.display = "none";
             }
         });

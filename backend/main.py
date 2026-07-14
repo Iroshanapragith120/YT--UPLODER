@@ -5,6 +5,8 @@ import urllib.request
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 import google_auth_oauthlib.flow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -21,7 +23,7 @@ app.add_middleware(
 
 SCOPES = ['https://www.googleapis.com/auth/youtube.upload']
 VIDEO_DIR = "downloaded_videos"
-CONFIG_FILE = "config.json" # 💡 GitHub එකට අප්ලෝඩ් කරපු ෆයිල් එක
+CONFIG_FILE = "config.json"
 
 if not os.path.exists(VIDEO_DIR):
     os.makedirs(VIDEO_DIR)
@@ -37,7 +39,6 @@ class UploadRequest(BaseModel):
     is_series: bool
     auth_code: str
 
-# 🔐 කෙළින්ම config.json ෆයිල් එක ලෝඩ් කරන ලොජික් එක
 def load_google_config():
     if not os.path.exists(CONFIG_FILE):
         raise HTTPException(status_code=500, detail="config.json ෆයිල් එක සර්වර් එකේ සොයාගත නොහැක!")
@@ -46,7 +47,6 @@ def load_google_config():
             return json.load(f)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Config ෆයිල් එක කියවීමේ දෝෂයක්: {str(e)}")
-
 
 # 📥 1. වීඩියෝ එක CUSTOM NAME එකෙන් බාන API එක
 @app.post("/download")
@@ -64,46 +64,32 @@ def download_video(data: DownloadRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
 # 🔑 2. YOUTUBE LOGIN ලින්ක් එක ගන්න API එක
 @app.get("/get-auth-url")
 def get_auth_url():
     client_config = load_google_config()
-    
-    flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_config(
-        client_config, scopes=SCOPES)
+    flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_config(client_config, scopes=SCOPES)
     flow.redirect_uri = 'urn:ietf:wg:oauth:2.0:oob'
     auth_url, _ = flow.authorization_url(prompt='consent')
     return {"auth_url": auth_url}
-
 
 # 📤 3. YOUTUBE UPLOAD කරලා AUTO-DELETE (CUT) කරන API එක
 @app.post("/upload")
 def upload_and_cut_video(data: UploadRequest):
     file_path = os.path.join(VIDEO_DIR, data.filename)
-    
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="වීඩියෝ ෆයිල් එක සර්වර් එකේ නැත!")
         
     try:
         client_config = load_google_config()
-        
-        flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_config(
-            client_config, scopes=SCOPES)
+        flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_config(client_config, scopes=SCOPES)
         flow.redirect_uri = 'urn:ietf:wg:oauth:2.0:oob'
         flow.fetch_token(code=data.auth_code)
         youtube = build('youtube', 'v3', credentials=flow.credentials)
         
         body = {
-            'snippet': {
-                'title': data.title,
-                'description': data.description,
-                'categoryId': '22'
-            },
-            'status': {
-                'privacyStatus': 'public',
-                'selfDeclaredMadeForKids': False
-            }
+            'snippet': {'title': data.title, 'description': data.description, 'categoryId': '22'},
+            'status': {'privacyStatus': 'public', 'selfDeclaredMadeForKids': False}
         }
         
         media = MediaFileUpload(file_path, chunksize=1024*1024, resumable=True)
@@ -113,11 +99,22 @@ def upload_and_cut_video(data: UploadRequest):
         while response is None:
             status, response = request.next_chunk()
             
-        # 🔥 UPLOAD වුණු ගමන් සර්වර් එකෙන් ඩිලීට් කිරීම (Cut)
         if os.path.exists(file_path):
             os.remove(file_path)
             
         return {"status": "success", "video_id": response['id'], "message": "YouTube එකට අප්ලෝඩ් වුණා, සර්වර් එකෙන් මැකුණා!"}
-        
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# 🌐 🔥 💡 මෙන්න වැදගත්ම කොටස: FRONTEND එක සර්වර් එකට සම්බන්ධ කිරීම
+# frontend ෆෝල්ඩර් එකේ තියෙන CSS, JS ෆයිල් ටික සර්වර් එකට ලෝඩ් කරනවා
+if os.path.exists("frontend"):
+    app.mount("/static", StaticFiles(directory="frontend"), name="static")
+
+# ලින්ක් එකට ගියපු ගමන් index.html එක පෙන්වනවා
+@app.get("/")
+def read_index():
+    index_path = os.path.join("frontend", "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"message": "Frontend files not found inside 'frontend' folder!"}ව්

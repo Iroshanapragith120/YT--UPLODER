@@ -9,11 +9,10 @@ from fastapi import FastAPI, HTTPException, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 
 app = FastAPI()
 
-# 🌐 CORS Setup (Frontend එකයි Backend එකයි ලෙඩ නැතුව කතා කරගන්න)
+# 🌐 CORS Setup (ලෙඩ නැතුව Frontend එකයි Backend එකයි කනෙක්ට් කරන්න)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -22,7 +21,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 📂 බාන වීඩියෝ තියාගන්න ෆෝල්ඩර් එකක් හදනවා
+# 📂 බාන වීඩියෝ තියාගන්න ෆෝල්ඩර් එක
 DOWNLOAD_DIR = "downloads"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
@@ -35,17 +34,15 @@ def get_auth_token():
         token = f.read().strip()
     return token
 
-# 📥 1. Video Download API (Direct URL එකෙන් සර්වර් එකට බානවා)
-@app.post("/api/download")
+# 📥 1. Video Download API (උඹේ Frontend එක ඉල්ලන නියම ලින්ක් එක: /download)
+@app.post("/download")
 async def download_video(url: str = Form(...)):
     try:
         print(f"📥 වීඩියෝ එක ඩවුන්ලොඩ් වෙනවා: {url}")
         
-        # ෆයිල් එක සේව් කරන නම
         file_name = f"video_{int(asyncio.get_event_loop().time())}.mp4"
         file_path = os.path.join(DOWNLOAD_DIR, file_name)
         
-        # සෘජුවම ලින්ක් එකෙන් වීඩියෝ එක බාගැනීම
         response = requests.get(url, stream=True, timeout=60)
         if response.status_code != 200:
             raise Exception("වීඩියෝ ලින්ක් එක වැඩ කරන්නේ නැත!")
@@ -64,8 +61,8 @@ async def download_video(url: str = Form(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# 📋 2. Video List API (Frontend එක ලැයිස්තුව ඉල්ලන කොටුව)
-@app.get("/api/videos")
+# 📋 2. Video List API (උඹේ Frontend එක ඉල්ලන නියම ලින්ක් එක: /list-videos)
+@app.get("/list-videos")
 async def list_videos():
     try:
         if not os.path.exists(DOWNLOAD_DIR):
@@ -76,8 +73,8 @@ async def list_videos():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# 🚀 3. YouTube Upload API (සෙලීනියම් නැති Direct Request ක්‍රමය)
-@app.post("/api/upload")
+# 🚀 3. YouTube Upload API (උඹේ Frontend එක ඉල්ලන නියම ලින්ක් එක: /upload)
+@app.post("/upload")
 async def upload_to_youtube(
     file_path: str = Form(...), 
     title: str = Form(...), 
@@ -90,10 +87,9 @@ async def upload_to_youtube(
         if not os.path.exists(file_path):
             raise Exception("අදාළ වීඩියෝ ෆයිල් එක සර්වර් එකේ නැත!")
 
-        # 🚨 මෙතනදී තමයි අපේ අලුත් youtube_upload_no_api Script එක වැඩ කරන්නේ
+        # youtube_upload_no_api Script එක හරහා Upload කිරීම
         from youtube_upload_no_api import YoutubeUpload
         
-        # අපි සාදාගත් අලුත් module එකෙන් upload එක සිදු කිරීම
         uploader = YoutubeUpload(auth_file="auth.txt")
         success = uploader.upload(
             file_path=file_path,
@@ -103,17 +99,16 @@ async def upload_to_youtube(
         )
 
         if success:
-            # අප්ලෝඩ් වුණාට පස්සේ සර්වර් එකේ ඉඩ ඉතුරු කරන්න බාපු ෆයිල් එක මකනවා
             if os.path.exists(file_path):
                 os.remove(file_path)
-            return {"status": "success", "message": f"'{title}' වීඩියෝ එක සාර්ථකව YouTube එකට අප්ලෝඩ් වුණා! 🎉"}
+            return {"status": "success", "message": f"'{title}' වීඩියോ එක සාර්ථකව YouTube එකට අප්ලෝඩ් වුණා! 🎉"}
         else:
             raise Exception("YouTube එකට තල්ලු කිරීම අසාර්ථක වුණා.")
             
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# 🗂️ 4. Frontend Router (HTML/CSS/JS සර්ව් කිරීම)
+# 🗂 "frontend" ෆෝල්ඩර් එක Static Files විදිහට මවුන්ට් කිරීම
 app.mount("/frontend", StaticFiles(directory="../frontend"), name="frontend")
 
 @app.get("/")
@@ -127,4 +122,4 @@ async def read_index():
 with open(main_py_path, "w") as f:
     f.write(full_code)
 
-print("🎯 main.py එක 100% ක්ම නිවැරදිව සහ සියලුම API Routes සමඟ අප්ඩේට් කරා මචන්!")
+print("🎯 නියමයි මචන්! Frontend එකට හරියන විදිහට (404 Error නැතිවෙන්න) main.py එක සම්පූර්ණයෙන්ම හැදුවා.")

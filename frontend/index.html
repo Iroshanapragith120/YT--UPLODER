@@ -1,1 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YT Uploader</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
 
+    <!-- 🍔 Sidebar Menu -->
+    <div id="sidebar" class="sidebar">
+        <button class="close-btn" onclick="toggleMenu()">×</button>
+        <h2>📂 Saved Videos</h2>
+        <div id="downloaded-list">
+            <p class="no-videos">No videos downloaded yet.</p>
+        </div>
+    </div>
+
+    <!-- 🌐 Header Bar -->
+    <nav class="navbar">
+        <span class="menu-icon" onclick="toggleMenu()">☰</span>
+        <h1 class="logo">YT UPLOADER</h1>
+    </nav>
+
+    <!-- 🏠 Home Section -->
+    <div id="home-section" class="container">
+        <div class="welcome-text">
+            <h2>YT UPLOADER PRO</h2>
+            <p>Cloud-to-Cloud Video Manager (Zero Data Cost)</p>
+        </div>
+        
+        <div class="box-grid">
+            <!-- Box 1 -->
+            <div class="box card-1" onclick="showSection('download-page')">
+                <h3>📥 Download Video From Site</h3>
+                <p>Paste direct link & save with custom name.</p>
+            </div>
+            <!-- Box 2 -->
+            <div class="box card-2" onclick="showSection('upload-page')">
+                <h3>📤 Upload Video to YouTube</h3>
+                <p>Select saved videos and upload with auto-delete.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 📥 Download Page -->
+    <div id="download-page" class="container hidden">
+        <h2>Direct Link Downloader</h2>
+        <div class="form-group">
+            <label>1. Video Direct Link (URL)</label>
+            <input type="text" id="video-link" placeholder="Paste Video URL here...">
+        </div>
+        
+        <!-- 💡 උඹ ඉල්ලපු අලුත්ම Custom Name Box එක -->
+        <div class="form-group">
+            <label>2. Save Video As (Custom Name)</label>
+            <input type="text" id="custom-name" placeholder="e.g. walking 1-1 (Don't add .mp4)">
+        </div>
+        
+        <button class="btn" onclick="startDownload()">Next ➔</button>
+        <button class="btn btn-back" onclick="showSection('home-section')">Back to Home</button>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

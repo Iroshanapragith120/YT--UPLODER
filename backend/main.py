@@ -1,8 +1,4 @@
 import os
-
-main_py_path = "/content/YT--UPLODER/backend/main.py"
-
-full_code = """import os
 import requests
 import asyncio
 from fastapi import FastAPI, HTTPException, Form
@@ -22,12 +18,13 @@ app.add_middleware(
 )
 
 # 📂 බාන වීඩියෝ Cloud එකේ සේව් වෙන ෆෝල්ඩර් එක
-DOWNLOAD_DIR = "downloads"
+# Colab එකේ run වෙනකොට මේ path එක හරියටම හැදෙනවා
+DOWNLOAD_DIR = "/content/YT--UPLODER/backend/downloads"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 # 🔑 auth.txt එකෙන් SAPISIDHASH ටෝකන් එක කියවීම
 def get_auth_token():
-    auth_file = "auth.txt"
+    auth_file = "/content/YT--UPLODER/backend/auth.txt"
     if not os.path.exists(auth_file):
         raise HTTPException(status_code=500, detail="auth.txt file not found in backend folder!")
     with open(auth_file, "r") as f:
@@ -35,8 +32,7 @@ def get_auth_token():
     return token
 
 # =====================================================================
-# 📥 1. DIRECT LINK DOWNLOAD API
-# (ලින්ක් එක දුන්නම වීඩියෝ එක Cloud එකට විතරක් බාන වෙනමම API එකක්)
+# 📥 1. DIRECT LINK DOWNLOAD API (වීඩියෝ එක බාන එක)
 # =====================================================================
 @app.post("/download")
 async def download_video(url: str = Form(...)):
@@ -68,8 +64,7 @@ async def download_video(url: str = Form(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 # =====================================================================
-# 📋 2. VIDEO LIST API
-# (Cloud එකට බාපු වීඩියෝ ටික Frontend එකේ පෙන්නන්න දෙන ලින්ක් එක)
+# 📋 2. VIDEO LIST API (බාපු වීඩියෝ ලිස්ට් එක ගන්න එක)
 # =====================================================================
 @app.get("/list-videos")
 async def list_videos():
@@ -77,15 +72,13 @@ async def list_videos():
         if not os.path.exists(DOWNLOAD_DIR):
             return []
         files = os.listdir(DOWNLOAD_DIR)
-        # downloads ෆෝල්ඩර් එකේ තියෙන .mp4 ෆයිල් ටික ලැයිස්තුගත කිරීම
         video_list = [{"name": f, "path": os.path.join(DOWNLOAD_DIR, f)} for f in files if f.endswith('.mp4')]
         return video_list
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 # =====================================================================
-# 🚀 3. YOUTUBE UPLOAD API
-# (ලැයිස්තුවෙන් තෝරලා SAPISIDHASH එක හරහා YT එකට විතරක් අප්ලෝඩ් කරන API එක)
+# 🚀 3. YOUTUBE UPLOAD API (SAPISIDHASH එකෙන් YT එකට යවන එක)
 # =====================================================================
 @app.post("/upload")
 async def upload_to_youtube(
@@ -94,18 +87,16 @@ async def upload_to_youtube(
     description: str = Form(...)
 ):
     try:
-        # 1. auth.txt එකෙන් SAPISIDHASH එක කියවනවා
         token = get_auth_token()
         print(f"🚀 YouTube Upload ආරම්භ කරා: {title}")
         
-        # 2. ෆයිල් එක Cloud එකේ තියෙනවද බලනවා
         if not os.path.exists(file_path):
             raise Exception("අදාළ වීඩියෝ ෆයිල් එක Cloud (Server) එකේ සොයාගත නොහැක!")
 
-        # 3. සෙලීනියම් නැතුව Direct Request එකෙන් අප්ලෝඩ් කරන ස්ක්‍රිප්ට් එක ලෝඩ් කිරීම
+        # සෙලීනියම් නැතුව Direct Request එකෙන් අප්ලෝඩ් කරන ස්ක්‍රිප්ට් එක ලෝඩ් කිරීම
         from youtube_upload_no_api import YoutubeUpload
         
-        uploader = YoutubeUpload(auth_file="auth.txt")
+        uploader = YoutubeUpload(auth_file="/content/YT--UPLODER/backend/auth.txt")
         success = uploader.upload(
             file_path=file_path,
             title=title,
@@ -114,7 +105,6 @@ async def upload_to_youtube(
         )
 
         if success:
-            # අප්ලෝඩ් වුණාට පස්සේ Cloud එකේ ඉඩ ඉතුරු කරන්න බාපු ෆයිල් එක මකනවා
             if os.path.exists(file_path):
                 os.remove(file_path)
             return {"status": "success", "message": f"'{title}' වීඩියෝ එක සාර්ථකව YouTube එකට අප්ලෝඩ් වුණා! 🎉"}
@@ -127,17 +117,12 @@ async def upload_to_youtube(
 # =====================================================================
 # 🗂 4. FRONTEND STATIC FILE ROUTER
 # =====================================================================
-app.mount("/frontend", StaticFiles(directory="../frontend"), name="frontend")
+# Colab එකේ නියත Path එකම මෙතනට දාලා තියෙන්නේ ලෙඩ නොවෙන්න
+app.mount("/frontend", StaticFiles(directory="/content/YT--UPLODER/frontend"), name="frontend")
 
 @app.get("/")
 async def read_index():
-    index_path = os.path.join("../frontend", "index.html")
+    index_path = "/content/YT--UPLODER/frontend/index.html"
     if os.path.exists(index_path):
         return FileResponse(index_path)
     return {"message": "Frontend index.html missing!"}
-"""
-
-with open(main_py_path, "w") as f:
-    f.write(full_code)
-
-print("🎯 සාර්ථකයි මචන්! හැම API එකක්ම (Download, List, Upload) වෙන වෙනම සම්පූර්ණයෙන්ම ඇතුළත් කරලා main.py එක හැදුවා.")

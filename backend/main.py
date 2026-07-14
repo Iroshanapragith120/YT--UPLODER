@@ -12,6 +12,8 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 
 app = FastAPI()
@@ -20,7 +22,7 @@ VIDEO_DIR = "videos"
 if not os.path.exists(VIDEO_DIR):
     os.makedirs(VIDEO_DIR)
 
-# 💾 උඹ ලබාදුන් YouTube Cookies 12 කෙලින්ම කෝඩ් එකට ඇතුලත් කලා
+# 💾 YouTube Cookies 12
 MY_YOUTUBE_COOKIES = [
     {"domain": ".youtube.com", "expirationDate": 1818587061.046194, "hostOnly": False, "httpOnly": True, "name": "__Secure-3PSID", "path": "/", "secure": True, "session": False, "storeId": None, "value": "g.a000_wjRxn3jNj8MdxiYXmwcvWU6m3KG6UhrnquU8KOEVrLK0bcpeoByj1mpgtfmzVp3KeO__wACgYKAf8SARESFQHGX2MiOUud5pfJYd5ZsMka147IthoVAUF8yKrjLsuAiRg6Q1bVMFACFB8Z0076"},
     {"domain": ".youtube.com", "expirationDate": 1815583072.349012, "hostOnly": False, "httpOnly": True, "name": "__Secure-1PSIDTS", "path": "/", "secure": True, "session": False, "storeId": None, "value": "sidts-CjQBPWEu2ZfRSAzxSjo81acwFSUQjQpck2vQaT33Ijj4yZHev2YGcGpYjFyVBK837cgTzWbPEAA"},
@@ -101,63 +103,74 @@ async def upload_video(req: UploadRequest):
     chrome_options.add_argument("--headless") 
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--window-size=1920,1080") # Full screen සෙට් කරනවා එලිමන්ට් නොහැංගෙන්න
     chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+    wait = WebDriverWait(driver, 30) # උපරිම තත්පර 30ක් එලිමන්ට් එකක් එනකම් ඉවසන්න කියලා සෙට් කරනවා
     
     try:
-        # 💡 Cookies ඇතුල් කිරීමට ප්‍රථම YouTube වෙත යා යුතුය
+        # 💡 මුලින්ම යූටියුබ් එකට යමු
         driver.get("https://www.youtube.com")
-        time.sleep(3)
+        time.sleep(5)
         
-        print("කෝඩ් එකේ ඇති Cookies බ්‍රවුසර් එකට දමමින්...")
+        print("Cookies ඇතුලත් කරමින්...")
         for cookie in MY_YOUTUBE_COOKIES:
             try:
                 driver.add_cookie(cookie)
             except Exception:
                 pass
                 
-        # 💡 දැන් කෙළින්ම YouTube Studio එකට (ලොගින් පිටු එන්නේ නැත)
-        print("YouTube Studio වෙත පිවිසෙමින්...")
+        # 💡 කෙළින්ම අප්ලෝඩ් ඩයලොග් එකට යමු
+        print("YouTube Studio අප්ලෝඩ් පිටුවට පිවිසෙමින්...")
         driver.get("https://studio.youtube.com/channel/UC/videos?d=ud")
-        time.sleep(7)
+        time.sleep(10) # පිටුව සම්පූර්ණයෙන්ම ලෝඩ් වෙන්න ලොකු වෙලාවක් දෙනවා
         
-        print("වීඩියෝ ෆයිල් එක අප්ලෝඩ් කරමින්...")
-        file_input = driver.find_element(By.XPATH, "//input[@type='file']")
+        print("වීඩියෝ ෆයිල් එක සිලෙක්ට් කරමින්...")
+        file_input = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@type='file']")))
         file_input.send_keys(full_path)
-        time.sleep(8) 
+        print("ෆයිල් එක සර්වර් එකට අප්ලෝඩ් වෙනකම් තත්පර 15ක් ඉවසනවා...")
+        time.sleep(15) 
         
-        print("Title සහ Description සකසමින්...")
-        title_box = driver.find_element(By.XPATH, "//div[@id='textbox' and @textbox-id='title-textbox']")
+        # 🔥 මෙන්න මෙතන තමයි ක්‍රෑෂ් වුණේ. දැන් 'wait.until' දාලා තියෙන්නේ කොටුව පේනකම්ම ඉන්නවා.
+        print("Title කොටුව සොයමින්...")
+        title_box = wait.until(EC.element_to_be_clickable((By.XPATH, "//div[@id='textbox' and @textbox-id='title-textbox']")))
         title_box.clear()
+        time.sleep(1)
         title_box.send_keys(req.title)
+        print("Title එක ඇතුලත් කලා!")
         
-        desc_box = driver.find_element(By.XPATH, "//div[@id='textbox' and @textbox-id='description-textbox']")
+        print("Description කොටුව සොයමින්...")
+        desc_box = wait.until(EC.element_to_be_clickable((By.XPATH, "//div[@id='textbox' and @textbox-id='description-textbox']")))
         desc_box.clear()
+        time.sleep(1)
         desc_box.send_keys(req.description)
+        print("Description එක ඇතුලත් කලා!")
         time.sleep(3)
         
-        print("Next බටන් ක්ලික් කරමින්...")
-        for _ in range(3):
-            next_btn = driver.find_element(By.ID, "next-button")
+        print("Next බටන් 3 ක්ලික් කරමින් ඉදිරියට යමින්...")
+        for i in range(3):
+            next_btn = wait.until(EC.element_to_be_clickable((By.ID, "next-button")))
             next_btn.click()
-            time.sleep(4)
+            print(f"Next {i+1} ක්ලික් කලා")
+            time.sleep(5)
             
         print("වීඩියෝව Private ලෙස සකසමින්...")
-        private_radio = driver.find_element(By.NAME, "PRIVATE")
+        private_radio = wait.until(EC.element_to_be_clickable((By.NAME, "PRIVATE")))
         private_radio.click()
         time.sleep(3)
         
-        print("අවසාන සේව් කිරීම සිදුකරමින්...")
-        save_btn = driver.find_element(By.ID, "done-button")
+        print("අවසාන සේව් බටන් එක ක්ලික් කරමින්...")
+        save_btn = wait.until(EC.element_to_be_clickable((By.ID, "done-button")))
         save_btn.click()
-        time.sleep(8) 
+        print("සම්පූර්ණයෙන්ම අප්ලෝඩ් වී අවසන් වනතුරු තත්පර 10ක් රැඳී සිටිනවා...")
+        time.sleep(10) 
         
         driver.quit()
         if os.path.exists(full_path):
             os.remove(full_path)
             
-        return {"message": "🔥 ගේම සක්සස් මචන්! කිසිම බ්ලොක් එකක් නැතුව වීඩියෝව YouTube එකට ඔටෝ අප්ලෝඩ් වුණා!"}
+        return {"message": "🔥 ගේම සක්සස් මචන්! කිසිම බ්ලොක් එකක් හෝ Error එකක් නැතුව වීඩියෝව YouTube එකට ඔටෝ අප්ලෝඩ් වුණා!"}
         
     except Exception as e:
         driver.quit()

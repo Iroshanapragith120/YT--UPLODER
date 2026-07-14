@@ -2,6 +2,7 @@ import os
 import glob
 import time
 import re
+import requests
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -41,47 +42,60 @@ def read_root():
 
 @app.post("/download")
 async def download_video(req: DownloadRequest):
-    # සිංහල අකුරු, ඉංග්‍රීසි අකුරු, ඉලක්කම් සහ space/hyphen/underscore හැමදේම සපෝට් කරන්න නම සුද්ධ කිරීම
+    # සිංහල, ඉංග්‍රීසි, ඉලක්කම් සපෝට් කරන ලෙස නම සුද්ධ කිරීම
     safe_name = re.sub(r'[^\w\s\-\u0d80-\u0df4]', '', req.custom_name).strip()
     if not safe_name:
          safe_name = "downloaded_video_" + str(int(time.time()))
     
     filename = os.path.join(VIDEO_DIR, f"{safe_name}.mp4")
-    
+    url = req.url.strip()
+
     try:
-        # පළමු උත්සාහය: උපරිම Quality එකෙන් (1080p/720p) වීඩියෝව සහ ඕඩියෝව වෙන වෙනම බාගෙන ffmpeg හරහා merge කිරීම.
-        # බ්ලොක් නොවී බෑම සඳහා --no-check-certificates, --no-playlist සහ --user-agent එක් කර ඇත.
+        # 💡 [ක්‍රමය 1] - ඩිරෙක්ට් ලින්ක් එකක්ද කියා පරික්ෂා කර කෙළින්ම බාගැනීම (Direct Download)
+        # YouTube හෝ Vimeo නොවන වෙනත් ඕනෑම ඩිරෙක්ට් ලින්ක් එකක් නම්:
+        if not ("youtube.com" in url or "youtu.be" in url or "vimeo.com" in url):
+            print("Direct Link එකක් හඳුනාගන්නා ලදී! කෙළින්ම ක්ලවුඩ් එකට බාගැනීම ආරම්භ කරයි...")
+            
+            # Streaming මඟින් ලොකු ෆයිල් වුණත් සර්වර් එකේ Memory එක පිරෙන්නේ නැතිව බාගැනීම
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+            with requests.get(url, headers=headers, stream=True, timeout=180) as r:
+                r.raise_for_status()
+                with open(filename, 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+            
+            if os.path.exists(filename) and os.path.getsize(filename) > 0:
+                return {"message": f"✅ සේව් සක්සස්! (Direct Download) '{safe_name}.mp4' සාර්ථකව සේව් වුණා!"}
+
+        # 💡 [ක්‍රමය 2] - YouTube ලින්ක් එකක් නම් පමණක් yt-dlp භාවිතයෙන් බාගැනීම
+        print("YouTube ලින්ක් එකක් හඳුනාගන්නා ලදී! yt-dlp හරහා බාගැනීම ආරම්භ කරයි...")
         command = (
             f'yt-dlp --no-check-certificates --no-playlist '
             f'--user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" '
             f'-f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" '
-            f'--merge-output-format mp4 "{req.url}" -o "{filename}"'
+            f'--merge-output-format mp4 "{url}" -o "{filename}"'
         )
         
-        print(f"Running command: {command}")
         exit_code = os.system(command)
         
-        # යම් හෙයකින් පළමු ක්‍රමය අසාර්ථක වුණොත් හෝ ෆයිල් එක හැදුනේ නැත්නම්:
+        # යම් හෙයකින් YouTube එකේ 1080p/Merge කේස් ආවොත් fallback එක දුවනවා
         if exit_code != 0 or not os.path.exists(filename):
-            print("පළමු උත්සාහය අසාර්ථකයි! දෙවන (Fallback) ක්‍රමයෙන් උත්සාහ කරයි...")
-            # දෙවන උත්සාහය: කෙලින්ම එකට Merge වෙලා තියෙන හොඳම format එක බෑම (මෙහිදී ffmpeg merge අවශ්‍ය නොවේ).
+            print("පළමු YouTube උත්සාහය අසාර්ථකයි! දෙවන (Fallback) ක්‍රමයෙන් උත්සාහ කරයි...")
             fallback_command = (
                 f'yt-dlp --no-check-certificates --no-playlist '
                 f'--user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" '
-                f'-f "best" "{req.url}" -o "{filename}"'
+                f'-f "best" "{url}" -o "{filename}"'
             )
             os.system(fallback_command)
             
-        if not os.path.exists(filename):
-            raise HTTPException(
-                status_code=500, 
-                detail="බාගැනීම අසාර්ථක විය! YouTube සීමාවක් නිසා හෝ ලින්ක් එකේ ගැටලුවක් විය හැක. නැවත උත්සාහ කරන්න."
-            )
+        if not os.path.exists(filename) or os.path.getsize(filename) == 0:
+            raise HTTPException(status_code=500, detail="බාගැනීම අසාර්ථක විය! ලින්ක් එක හෝ සර්වර් එක පරික්ෂා කරන්න.")
             
-        return {"message": f"✅ සේව් සක්සස්! '{safe_name}.mp4' සාර්ථකව සේව් වුණා!"}
+        return {"message": f"✅ සේව් සක්සස්! (YT Download) '{safe_name}.mp4' සාර්ථකව සේව් වුණා!"}
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"දෝෂයක් සිදුවිය: {str(e)}")
 
 @app.get("/list-videos")
 def list_videos():

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YT Auto Master (Selenium Custom API)</title>
+    <title>YT Auto Master (Fixed Cookie)</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body { background-color: #121212; color: #ffffff; padding-top: 30px; }
@@ -19,7 +19,7 @@
 </head>
 <body>
     <div class="container m-auto" style="max-width: 700px;">
-        <h2 class="text-center mb-4 text-danger">🚀 YT Auto Master (No API Limits)</h2>
+        <h2 class="text-center mb-4 text-danger">🚀 YT Auto Master (Instant Login Edition)</h2>
 
         <!-- 1 වෙනි කොටස -->
         <div class="card p-4">
@@ -29,34 +29,18 @@
                 <input type="text" id="dl_url" class="form-control bg-dark text-white border-secondary" placeholder="https://...">
             </div>
             <div class="mb-3">
-                <label>වීඩියෝවට තැබිය යුතු නම (ෆෝල්ඩර් එකේ සේව් වීමට):</label>
+                <label>වීඩියෝවට තැබිය යුතු නම:</label>
                 <input type="text" id="dl_name" class="form-control bg-dark text-white border-secondary" placeholder="eg: new_video">
             </div>
             <button onclick="downloadVideo()" class="btn btn-primary w-100">
-                📥 සර්වර් ෆෝල්ඩර් එකට බාගන්න <div id="dl_spinner" class="spinner"></div>
+                📥 සර්වර් ෆෝල්ඩර් එකට බාන්න <div id="dl_spinner" class="spinner"></div>
             </button>
             <div id="dl_status" class="mt-2 text-warning fw-bold"></div>
         </div>
 
         <!-- 2 වෙනි කොටස -->
         <div class="card p-4">
-            <h4 class="text-white mb-3">🔑 2 වෙනි කොටස: YouTube ගිණුමේ විස්තර</h4>
-            <div class="row">
-                <div class="col-md-6 mb-3">
-                    <label>Google Email:</label>
-                    <input type="email" id="yt_email" class="form-control bg-dark text-white border-secondary" placeholder="example@gmail.com">
-                </div>
-                <div class="col-md-6 mb-3">
-                    <label>Google Password:</label>
-                    <input type="password" id="yt_password" class="form-control bg-dark text-white border-secondary" placeholder="******">
-                </div>
-            </div>
-            <div class="text-muted small">⚠️ ආරක්ෂාව සඳහා සැමවිටම අලුත් Dummy ගිණුමක් භාවිතා කරන්න මචන්.</div>
-        </div>
-
-        <!-- 3 වෙනි කොටස -->
-        <div class="card p-4">
-            <h4 class="text-white mb-3">📤 3 වෙනි කොටස: වීඩියෝව තෝරා YouTube දැමීම</h4>
+            <h4 class="text-white mb-3">📤 2 වෙනි කොටස: YouTube වෙත අප්ලෝඩ් කිරීම</h4>
             <button onclick="loadVideoList()" class="btn btn-warning w-100 mb-3">🔄 සර්වර් එකේ ඇති වීඩියෝ ලැයිස්තුව ලෝඩ් කරන්න</button>
             
             <div class="mb-3">
@@ -88,8 +72,7 @@
             const spinner = document.getElementById("dl_spinner");
             
             if(!url || !name) return alert("ලින්ක් එක සහ නම අනිවාර්යයි!");
-            
-            status.innerText = "⏳ වීඩියෝව සර්වර් එකට බාගනිමින් පවතී... (Colab data භාවිතා වේ)";
+            status.innerText = "⏳ වීඩියෝව සර්වර් එකට බාගනිමින් පවතී...";
             spinner.style.display = "inline-block";
             
             try {
@@ -121,30 +104,24 @@
             const video = document.getElementById("video_select").value;
             const title = document.getElementById("up_title").value;
             const desc = document.getElementById("up_desc").value;
-            const email = document.getElementById("yt_email").value;
-            const password = document.getElementById("yt_password").value;
             const status = document.getElementById("up_status");
             const spinner = document.getElementById("up_spinner");
 
-            if(!video || !title || !email || !password) return alert("සියලුම කොටස් ඇතුළත් කිරීම අනිවාර්යයි!");
+            if(!video || !title) return alert("වීඩියෝව සහ මාතෘකාව ඇතුළත් කිරීම අනිවාර්යයි!");
 
-            status.innerText = "⏳ සර්වර් එක ඇතුළෙන් ඔටෝම YouTube ලොග් වී අප්ලෝඩ් වෙමින් පවතී... කරුණාකර රැඳී සිටින්න...";
+            status.innerText = "⏳ කෝඩ් එකේ ඇති Cookies මඟින් YouTube Studio වෙත රිංගා ඔටෝම අප්ලෝඩ් වෙමින් පවතී...";
             spinner.style.display = "inline-block";
             
             try {
                 const res = await fetch('/upload', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({video_filename: video, title: title, description: desc, email: email, password: password})
+                    body: JSON.stringify({video_filename: video, title: title, description: desc})
                 });
                 const data = await res.json();
-                if(data.detail) {
-                    status.innerText = "❌ " + data.detail;
-                } else {
-                    status.innerText = "✅ " + data.message;
-                    loadVideoList(); 
-                }
-            } catch(e) { status.innerText = "❌ අප්ලෝඩ් වීම අසාර්ථකයි! (ලොගින් විස්තර හෝ සර්වර් දෝෂයකි)"; }
+                status.innerText = data.detail ? "❌ " + data.detail : "✅ " + data.message;
+                if(!data.detail) loadVideoList();
+            } catch(e) { status.innerText = "❌ අප්ලෝඩ් වීම අසාර්ථකයි!"; }
             finally { spinner.style.display = "none"; }
         }
     </script>

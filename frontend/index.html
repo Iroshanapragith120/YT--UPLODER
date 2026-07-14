@@ -27,38 +27,39 @@
 </head>
 <body>
 
-    <!-- පළමු පියවර: වීඩියෝ එක සර්වර් එකට බාගැනීම (නොවෙනස්ව පවතී) -->
+    <!-- පළමු පියවර: වීඩියෝ එක සර්වර් එකට බාගැනීම -->
     <div class="card">
         <h1>📥 1. Direct Link එකෙන් Cloud එකට බාන්න</h1>
         <p>ලින්ක් එක සහ සේව් වෙන්න ඕන නම දීලා වීඩියෝ එක Cloud එකට ගන්න.</p>
         
-        <form id="downloadForm">
+        <!-- Form එකක් වෙනුවට Div එකක් දැම්මා Auto-Submit / Auto-Refresh වීම් 100% ක් වැලැක්වීමට -->
+        <div id="downloadFormSection">
             <label for="videoUrl">Direct Video URL:</label>
             <input type="url" id="videoUrl" placeholder="https://example.com/video.mp4" required>
             
             <label for="customName">Save As (වීඩියෝ එක සේව් වෙන්න ඕන නම - Optional):</label>
             <input type="text" id="customName" placeholder="my_favorite_video.mp4">
             
-            <button type="submit">වීඩියෝ එක Cloud එකට බාන්න</button>
-        </form>
+            <button type="button" id="submitDownloadBtn">වීඩියෝ එක Cloud එකට බාන්න</button>
+        </div>
         
         <div id="downloadLoading" class="loading">⏳ වීඩියෝ එක බාමින් පවතී... කරුණාකර රැඳී සිටින්න...</div>
         <div id="downloadStatus" class="status-box"></div>
     </div>
 
-    <!-- දෙවන පියවර: YouTube එකට අප්ලෝඩ් කිරීම (Auto-Refresh ලෙඩේ හැදූ කොටස) -->
+    <!-- දෙවන පියවර: YouTube එකට අප්ලෝඩ් කිරීම -->
     <div class="card">
         <h1>🚀 2. බාපු වීඩියෝ YouTube එකට අප්ලෝඩ් කරන්න</h1>
         <p>සිලෙක්ට් කරලා YouTube එකට තල්ලු කරන්න.</p>
         
-        <!-- Form Tag එකටම action හෝ method දාන්නේ නැතුව JavaScript වලින් handle කරන නිසා form එක submit එක වලක්වනවා -->
-        <form id="uploadForm" onsubmit="event.preventDefault();">
+        <!-- Form එක සම්පූර්ණයෙන්ම අයින් කර Div එකක් දැම්මා, එවිට Refresh ලෙඩේ සදාකාලිකවම ඉවරයි -->
+        <div id="uploadFormSection">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
                 <label style="margin: 0;">Select Video from Cloud:</label>
                 <button type="button" class="btn-refresh" onclick="refreshVideoList()">🔄 Refresh List</button>
             </div>
             <select id="videoSelect" required>
-                <option value="">-- වීඩියෝවක් තෝරන්න --</option>
+                <option value="">-- 🔄 Refresh කර වීඩියෝවක් තෝරන්න --</option>
             </select>
             
             <label for="videoTitle">YouTube Title:</label>
@@ -68,7 +69,7 @@
             <textarea id="videoDesc" placeholder="වීඩියෝ විස්තරය" rows="4" required></textarea>
             
             <button type="button" class="btn-upload" id="submitUploadBtn">YouTube වෙත අප්ලෝඩ් කරන්න</button>
-        </form>
+        </div>
         
         <div id="uploadLoading" class="loading">⏳ YouTube වෙත අප්ලෝඩ් වෙමින් පවතී... කරුණාකර රැඳී සිටින්න...</div>
         <div id="uploadStatus" class="status-box"></div>
@@ -77,7 +78,7 @@
     <script>
         const API_BASE = window.location.origin;
 
-        // 1. Dropdown Refresh කිරීම (නොවෙනස්ව පවතී)
+        // 1. Dropdown Refresh කිරීම (උඹ එබුවොත් විතරක්මයි වැඩ කරන්නේ)
         async function refreshVideoList() {
             const select = document.getElementById("videoSelect");
             select.innerHTML = '<option value="">⏳ පූරණය වෙමින් පවතී...</option>';
@@ -104,13 +105,17 @@
             }
         }
 
-        // 2. වීඩියෝ බාන Form එක (නොවෙනස්ව පවතී)
-        document.getElementById("downloadForm").addEventListener("submit", async (e) => {
-            e.preventDefault();
+        // 2. වීඩියෝ බාන බටන් එක ක්ලික් කිරීම
+        document.getElementById("submitDownloadBtn").addEventListener("click", async () => {
             const url = document.getElementById("videoUrl").value;
             const customName = document.getElementById("customName").value;
             const loading = document.getElementById("downloadLoading");
             const statusBox = document.getElementById("downloadStatus");
+            
+            if (!url) {
+                alert("කරුණාකර Direct Video URL එක ඇතුළත් කරන්න!");
+                return;
+            }
             
             loading.style.display = "block";
             statusBox.style.display = "none";
@@ -129,26 +134,24 @@
                 
                 if (response.ok) {
                     statusBox.textContent = `✓ ${data.message}`;
-                    statusBox.classList.add("status-success");
+                    statusBox.className = "status-box status-success";
                     document.getElementById("videoUrl").value = "";
                     document.getElementById("customName").value = "";
-                    refreshVideoList();
+                    // බාගත්ත ගමන් Dropdown එක Auto Refresh නොවේ! User බටන් එකෙන්ම Refresh කරගත යුතුය.
                 } else {
                     statusBox.textContent = `❌ වැරැද්දක් වුණා: ${data.detail || "බාගැනීම අසාර්ථකයි"}`;
-                    statusBox.classList.add("status-error");
+                    statusBox.className = "status-box status-error";
                 }
             } catch (err) {
                 statusBox.textContent = "❌ සර්වර් එක කනෙක්ට් කරගන්න බැරි වුණා!";
-                statusBox.classList.add("status-error");
+                statusBox.className = "status-box status-error";
             } finally {
                 loading.style.display = "none";
             }
         });
 
-        // 3. YouTube Upload බටන් එක ක්ලික් කිරීම (Auto-Refresh ලෙඩේ සම්පූර්ණයෙන්ම සුවපත් කළ ක්‍රමය)
-        document.getElementById("submitUploadBtn").addEventListener("click", async (e) => {
-            e.preventDefault(); // ඕනෑම auto-submit එකක් නවත්වනවා
-            
+        // 3. YouTube Upload බටන් එක ක්ලික් කිරීම
+        document.getElementById("submitUploadBtn").addEventListener("click", async () => {
             const filePath = document.getElementById("videoSelect").value;
             const title = document.getElementById("videoTitle").value;
             const description = document.getElementById("videoDesc").value;
@@ -160,7 +163,6 @@
                 return;
             }
             
-            // Loading සක්‍රීය කිරීම සහ පරණ මැසේජ් මැකීම
             loading.style.display = "block";
             statusBox.style.display = "none";
             statusBox.className = "status-box";
@@ -180,26 +182,23 @@
                 
                 if (response.ok) {
                     statusBox.textContent = `🎉 ${data.message}`;
-                    statusBox.classList.add("status-success");
-                    // Form එක ක්ලියර් කරනවා
+                    statusBox.className = "status-box status-success";
                     document.getElementById("videoTitle").value = "";
                     document.getElementById("videoDesc").value = "";
-                    refreshVideoList();
                 } else {
-                    // Python Traceback එක ඇතුළුව එන ලොකු Error එක මෙතන දිගටම පෙන්වනවා
+                    // Python Traceback එක රතු පාට කොටුව ඇතුළේ ස්ථිරවම රඳවා තබයි!
                     statusBox.textContent = `❌ YouTube Upload Error:\n${data.detail}`;
-                    statusBox.classList.add("status-error");
+                    statusBox.className = "status-box status-error";
                 }
             } catch (err) {
-                statusBox.textContent = "❌ සර්වර් එක සමඟ තිබුණු සම්බන්ධතාවය බිඳ වැටුණා! (Server/FastAPI Crashed)";
-                statusBox.classList.add("status-error");
+                statusBox.textContent = "❌ සර්වර් එක සමඟ තිබුණු සම්බන්ධතාවය බිඳ වැටුණා! (FastAPI / Colab Server Offline)";
+                statusBox.className = "status-box status-error";
             } finally {
                 loading.style.display = "none";
             }
         });
 
-        // පේජ් එක ලෝඩ් වෙද්දීම ලිස්ට් එක අප්ඩේට් කරනවා
-        refreshVideoList();
+        // මුලින්ම පේජ් එක ලෝඩ් වෙද්දී ලිස්ට් එක හිස්ව පෙන්වයි
     </script>
 </body>
 </html>

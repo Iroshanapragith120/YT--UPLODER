@@ -1,6 +1,7 @@
 import os
 import glob
 import time
+import re
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -40,17 +41,45 @@ def read_root():
 
 @app.post("/download")
 async def download_video(req: DownloadRequest):
-    safe_name = "".join([c for c in req.custom_name if c.isalpha() or c.isdigit() or c in ' _-']).strip()
+    # සිංහල අකුරු, ඉංග්‍රීසි අකුරු, ඉලක්කම් සහ space/hyphen/underscore හැමදේම සපෝට් කරන්න නම සුද්ධ කිරීම
+    safe_name = re.sub(r'[^\w\s\-\u0d80-\u0df4]', '', req.custom_name).strip()
     if not safe_name:
-        raise HTTPException(status_code=400, detail="වලංගු නමක් දෙන්න!")
+         safe_name = "downloaded_video_" + str(int(time.time()))
     
     filename = os.path.join(VIDEO_DIR, f"{safe_name}.mp4")
+    
     try:
-        # Colab එකේ ඩේටා වලින්ම yt-dlp හරහා සුපිරියටම බාගැනීම
-        os.system(f'yt-dlp -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 "{req.url}" -o "{filename}"')
+        # පළමු උත්සාහය: උපරිම Quality එකෙන් (1080p/720p) වීඩියෝව සහ ඕඩියෝව වෙන වෙනම බාගෙන ffmpeg හරහා merge කිරීම.
+        # බ්ලොක් නොවී බෑම සඳහා --no-check-certificates, --no-playlist සහ --user-agent එක් කර ඇත.
+        command = (
+            f'yt-dlp --no-check-certificates --no-playlist '
+            f'--user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" '
+            f'-f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" '
+            f'--merge-output-format mp4 "{req.url}" -o "{filename}"'
+        )
+        
+        print(f"Running command: {command}")
+        exit_code = os.system(command)
+        
+        # යම් හෙයකින් පළමු ක්‍රමය අසාර්ථක වුණොත් හෝ ෆයිල් එක හැදුනේ නැත්නම්:
+        if exit_code != 0 or not os.path.exists(filename):
+            print("පළමු උත්සාහය අසාර්ථකයි! දෙවන (Fallback) ක්‍රමයෙන් උත්සාහ කරයි...")
+            # දෙවන උත්සාහය: කෙලින්ම එකට Merge වෙලා තියෙන හොඳම format එක බෑම (මෙහිදී ffmpeg merge අවශ්‍ය නොවේ).
+            fallback_command = (
+                f'yt-dlp --no-check-certificates --no-playlist '
+                f'--user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" '
+                f'-f "best" "{req.url}" -o "{filename}"'
+            )
+            os.system(fallback_command)
+            
         if not os.path.exists(filename):
-            raise HTTPException(status_code=500, detail="බාගැනීම අසාර්ථක විය!")
+            raise HTTPException(
+                status_code=500, 
+                detail="බාගැනීම අසාර්ථක විය! YouTube සීමාවක් නිසා හෝ ලින්ක් එකේ ගැටලුවක් විය හැක. නැවත උත්සාහ කරන්න."
+            )
+            
         return {"message": f"✅ සේව් සක්සස්! '{safe_name}.mp4' සාර්ථකව සේව් වුණා!"}
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -66,9 +95,8 @@ async def upload_video(req: UploadRequest):
     if not os.path.exists(full_path):
         raise HTTPException(status_code=404, detail="වීඩියෝ ෆයිල් එක සර්වර් එකේ නැත!")
 
-    # Colab සර්වර් එක ඇතුළේ background එකේ Chrome එකක් සකස් කිරීම
     chrome_options = Options()
-    chrome_options.add_argument("--headless") # අපිට නොපෙනී background එකේ දුවන්න
+    chrome_options.add_argument("--headless") 
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
@@ -76,61 +104,52 @@ async def upload_video(req: UploadRequest):
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
     
     try:
-        # 1. Google Login පිටුවට යාම
+        # 1. Google Login
         driver.get("https://accounts.google.com/ServiceLogin?service=youtube")
         time.sleep(3)
         
-        # Email එක ඇතුළත් කිරීම
         email_field = driver.find_element(By.NAME, "identifier")
         email_field.send_keys(req.email)
         driver.find_element(By.ID, "identifierNext").click()
         time.sleep(4)
         
-        # Password එක ඇතුළත් කිරීම
         password_field = driver.find_element(By.NAME, "password")
         password_field.send_keys(req.password)
         driver.find_element(By.ID, "passwordNext").click()
         time.sleep(6)
         
-        # 2. YouTube Studio උඩුගත කිරීමේ පිටුවට යාම
+        # 2. Go to YouTube Studio Upload
         driver.get("https://studio.youtube.com/channel/UC/videos?d=ud")
         time.sleep(5)
         
-        # වීඩියෝ ෆයිල් එක තෝරාගැනීම (File Input එකට සර්වර් එකේ ඇති path එක දීම)
         file_input = driver.find_element(By.XPATH, "//input[@type='file']")
         file_input.send_keys(full_path)
-        time.sleep(5) # වීඩියෝව සර්වර් එකෙන් Studio එකට ලෝඩ් වන තෙක්
+        time.sleep(5) 
         
-        # Title එක ඇතුළත් කිරීම (පළමු textbox එක)
         title_box = driver.find_element(By.XPATH, "//div[@id='textbox' and @textbox-id='title-textbox']")
         title_box.clear()
         title_box.send_keys(req.title)
         
-        # Description එක ඇතුළත් කිරීම
         desc_box = driver.find_element(By.XPATH, "//div[@id='textbox' and @textbox-id='description-textbox']")
         desc_box.clear()
         desc_box.send_keys(req.description)
         time.sleep(2)
         
-        # "Next" බටන් එක 3 පාරක් ක්ලික් කිරීම (Details -> Video Elements -> Checks -> Visibility)
         for _ in range(3):
             next_btn = driver.find_element(By.ID, "next-button")
             next_btn.click()
             time.sleep(3)
             
-        # වීඩියෝව Private දැමීම (නැතහොත් Public කිරීමට බටන් වෙනස් කළ හැක)
         private_radio = driver.find_element(By.NAME, "PRIVATE")
         private_radio.click()
         time.sleep(2)
         
-        # අවසාන වශයෙන් "Save" බටන් එක ක්ලික් කිරීම
         save_btn = driver.find_element(By.ID, "done-button")
         save_btn.click()
-        time.sleep(5) # සම්පූර්ණයෙන් සේව් වන තෙක්
+        time.sleep(5) 
         
         driver.quit()
         
-        # ✂️ සර්වර් එකෙන් වීඩියෝව මකා දැමීම
         if os.path.exists(full_path):
             os.remove(full_path)
             
